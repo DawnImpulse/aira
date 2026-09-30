@@ -1,0 +1,168 @@
+import { useEffect, useState } from "react";
+import { api, type Settings } from "../ipc";
+import { notify, updateConfig, useStore } from "../store";
+import { AI_PROVIDERS, aiCfg, aiProvider } from "../lib/aiProviders";
+import { hasBinary } from "../lib/agents";
+import { cx, Icon, Modal } from "./ui";
+
+const UI_FONTS = ["System", "Inter", "Helvetica Neue", "Avenir Next", "IBM Plex Sans", "Geist"];
+const MONO_FONTS = ["SF Mono", "Menlo", "Monaco", "JetBrains Mono", "Fira Code", "Cascadia Code", "IBM Plex Mono", "Source Code Pro", "Geist Mono"];
+
+export function SettingsDialog({ onClose }: { onClose: () => void }) {
+  const s = useStore((st) => st.config.settings);
+  const upd = (fn: (s: Settings) => void) => updateConfig((c) => fn(c.settings));
+  const [key, setKey] = useState("");
+  const [models, setModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [cliFound, setCliFound] = useState<boolean | null>(null);
+  const p = aiProvider(s.ai.provider);
+  const saved = !!s.ai.keySaved[p.id];
+
+  useEffect(() => {
+    setModels([]);
+    setCliFound(null);
+    if (p.cli) hasBinary(p.cli).then(setCliFound);
+  }, [p.id, p.cli]);
+
+  const saveKey = async (value: string) => {
+    try {
+      await api.aiSetKey(p.id, value);
+      upd((x) => void (x.ai.keySaved = { ...x.ai.keySaved, [p.id]: !!value.trim() }));
+      setKey("");
+    } catch (e) {
+      notify(e);
+    }
+  };
+  const loadModels = async () => {
+    setLoadingModels(true);
+    try {
+      const list = await api.aiListModels(aiCfg(s.ai));
+      setModels(list);
+      if (!list.length) notify("The provider returned no models; type one in.");
+    } catch (e) {
+      notify(e);
+    } finally {
+      setLoadingModels(false);
+    }
+  };
+
+  return (
+    <Modal title="Settings" onClose={onClose} width={540}>
+      <div className="form">
+        <div className="field">
+          <span>Theme</span>
+          <div className="segmented">
+            {(["dark", "light", "system"] as const).map((t) => (
+              <button key={t} className={cx(s.theme === t && "on")} onClick={() => upd((x) => void (x.theme = t))}>
+                <Icon name={t === "dark" ? "dark_mode" : t === "light" ? "light_mode" : "contrast"} size={14} /> {t[0].toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <label className="field">
+          <span>Interface font</span>
+          <input list="ui-fonts" value={s.uiFont} onChange={(e) => upd((x) => void (x.uiFont = e.target.value))} />
+          <datalist id="ui-fonts">{UI_FONTS.map((f) => <option key={f} value={f} />)}</datalist>
+        </label>
+
+        <div className="row gap">
+          <label className="field grow">
+            <span>Editor & terminal font</span>
+            <input list="mono-fonts" value={s.monoFont} onChange={(e) => upd((x) => void (x.monoFont = e.target.value))} />
+            <datalist id="mono-fonts">{MONO_FONTS.map((f) => <option key={f} value={f} />)}</datalist>
+          </label>
+          <label className="field">
+            <span>Size</span>
+            <input type="number" min={9} max={28} value={s.fontSize} onChange={(e) => upd((x) => void (x.fontSize = Math.min(28, Math.max(9, Number(e.target.value) || 13))))} />
+          </label>
+        </div>
+        <small className="dim">Fonts must be installed on this Mac. Unknown names fall back to SF Mono / system.</small>
+
+        <label className="check">
+          <input type="checkbox" checked={s.terminalWebgl} onChange={(e) => upd((x) => void (x.terminalWebgl = e.target.checked))} />
+          <span>GPU (WebGL) terminal rendering – faster for heavy output; turn off if terminals render blank.</span>
+        </label>
+
+        <div className="section-title">AI (commit messages)</div>
+        <label className="field">
+          <span>Provider</span>
+          <select className="select" value={p.id} onChange={(e) => upd((x) => void (x.ai.provider = e.target.value))}>
+            {(["Cloud", "Local", "Agent CLI", "Custom"] as const).map((g) => (
+              <optgroup key={g} label={g}>
+                {AI_PROVIDERS.filter((x) => x.group === g).map((x) => (
+                  <option key={x.id} value={x.id}>{x.label}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+
+        {(p.editableBase || p.group === "Custom") && (
+          <label className="field">
+            <span>Base URL</span>
+            <input
+              value={s.ai.baseUrls[p.id] ?? ""}
+              placeholder={p.baseUrl ?? "https://your-endpoint/v1"}
+              spellCheck={false}
+              onChange={(e) => upd((x) => void (x.ai.baseUrls = { ...x.ai.baseUrls, [p.id]: e.target.value }))}
+            />
+          </label>
+        )}
+
+        <label className="field">
+          <span>Model{p.kind === "cli" ? " (optional – the CLI's default otherwise)" : ""}</span>
+          <div className="row gap">
+            <input
+              className="grow"
+              list="ai-models"
+              value={s.ai.models[p.id] ?? p.defaultModel ?? ""}
+              placeholder={p.kind === "cli" ? "default" : "Pick or type a model id"}
+              spellCheck={false}
+              onChange={(e) => upd((x) => void (x.ai.models = { ...x.ai.models, [p.id]: e.target.value }))}
+            />
+            {p.kind !== "cli" && (
+              <button type="button" className="btn" onClick={loadModels} disabled={loadingModels || (!!p.needsKey && !saved)} title="Fetch the model list from the provider">
+                <Icon name="refresh" size={14} className={cx(loadingModels && "spin")} /> Models
+              </button>
+            )}
+          </div>
+          <datalist id="ai-models">{models.map((m) => <option key={m} value={m} />)}</datalist>
+        </label>
+
+        {(p.needsKey || p.optionalKey) && (
+          <label className="field">
+            <span>
+              API key{p.optionalKey ? " (optional)" : ""} {saved && <em className="green">· saved in macOS Keychain</em>}
+            </span>
+            <div className="row gap">
+              <input
+                type="password"
+                className="grow"
+                value={key}
+                placeholder={saved ? "•••••••• (enter a new key to replace)" : `${p.label} API key`}
+                onChange={(e) => setKey(e.target.value)}
+                autoComplete="off"
+              />
+              <button type="button" className="btn primary" disabled={!key.trim()} onClick={() => saveKey(key)}>Save</button>
+              {saved && <button type="button" className="btn" onClick={() => saveKey("")}>Remove</button>}
+            </div>
+          </label>
+        )}
+
+        {p.cli && cliFound !== null && (
+          <small className={cliFound ? "green" : "red"}>
+            {cliFound ? `\`${p.cli}\` found – uses your own login and subscription.` : `\`${p.cli}\` not found on PATH – install and sign in to it first.`}
+          </small>
+        )}
+        <small className={cx("privacy-note", `risk-${p.risk}`)}>
+          <Icon name={p.risk === "ok" ? "shield" : "warning"} size={13} />
+          <span>
+            {p.note} Nothing is sent until you press Generate.
+            {p.risk !== "ok" && " You'll be asked to confirm once before the first send."}
+          </span>
+        </small>
+      </div>
+    </Modal>
+  );
+}
