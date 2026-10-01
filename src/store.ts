@@ -6,6 +6,8 @@ import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, type Config, type FileEntry, type GitStatus, type Project, type Repo, type Script, type Space, type Tab, type TermSnapshot } from "./ipc";
 import { disposeModel, reloadIfClean, setEditorTheme } from "./lib/monaco";
 import { newTerminal, removeTerm, setTerminalTheme } from "./lib/terminals";
+import { nextIdentity } from "./lib/identity";
+import { AGENTS } from "./lib/agents";
 
 export interface Term extends TermSnapshot {
   sessionId?: string;
@@ -15,6 +17,8 @@ export interface Term extends TermSnapshot {
   stopped?: boolean;
   startedAt?: number;
   endedAt?: number;
+  /** `agent` was recognised from the shell's processes (typed in by hand), not launched as one. */
+  detected?: boolean;
 }
 
 export type Dialog =
@@ -26,11 +30,25 @@ export type Dialog =
   | { kind: "newPath"; dir: string; isDir: boolean }
   | { kind: "settings" };
 
+/** A Claude Code subagent; parent = the spawning subagent's id, or null for the main agent. */
+export interface SubAgentNode {
+  id: string;
+  type: string;
+  description?: string;
+  parent: string | null;
+  running: boolean;
+  startedAt: number;
+  endedAt?: number;
+}
+
 /** Coding-agent activity derived from terminal output (see lib/terminals). */
 export interface AgentStatus {
-  state: "working" | "idle";
+  /** waiting = asked for input/permission (Claude hooks only). */
+  state: "working" | "idle" | "waiting";
   since: number;
   everWorked: boolean;
+  /** Finished while nobody was looking: its space "breathes" until seen. */
+  unseen?: boolean;
 }
 
 interface State {
@@ -40,7 +58,8 @@ interface State {
   repos: Record<string, Repo[]>; // projectId → repos
   status: Record<string, GitStatus>; // repo path → status
   agentStatus: Record<string, AgentStatus>; // term key → activity (kept out of `terms` so it never triggers saves)
-  mem: { sessions: Record<string, number>; app: number };
+  subagents: Record<string, SubAgentNode[]>; // term key → Claude subagent tree (from hooks)
+  mem: { sessions: Record<string, number>; app: number; procs?: Record<string, string[]> };
   dirty: Record<string, boolean>; // file path → unsaved edits
   dialog: Dialog;
   restore: string[]; // script ids running at last quit
@@ -59,6 +78,7 @@ const DEFAULT_CONFIG: Config = {
     monoFont: "SF Mono",
     fontSize: 13,
     terminalWebgl: false,
+    notifyAgents: true,
     ai: { provider: "anthropic", models: {}, baseUrls: {}, keySaved: {}, acknowledged: {} },
   },
   layout: {
@@ -80,6 +100,7 @@ export const useStore = create<State>(() => ({
   repos: {},
   status: {},
   agentStatus: {},
+  subagents: {},
   mem: { sessions: {}, app: 0 },
   dirty: {},
   dialog: null,
@@ -118,6 +139,19 @@ export function notify(msg: unknown) {
   clearTimeout(toastTimer);
   set({ toast: String(msg) });
   toastTimer = window.setTimeout(() => set({ toast: null }), 7000);
+}
+
+/** A plain terminal running an agent CLI counts as that agent while it runs (status via the activity heuristic). */
+function detectAgents(procs: Record<string, string[]>) {
+  const terms = get().terms;
+  const patch: Record<string, Term> = {};
+  for (const t of Object.values(terms)) {
+    if (t.scriptId || (t.agent && !t.detected) || !t.sessionId) continue;
+    const names = procs[t.sessionId] ?? [];
+    const agent = AGENTS.find((a) => names.includes(a.bin))?.id;
+    if (agent !== t.agent) patch[t.key] = { ...t, agent, detected: agent ? true : undefined };
+  }
+  if (Object.keys(patch).length) set({ terms: { ...terms, ...patch } });
 }
 
 export function updateConfig(fn: (c: Config) => void) {
@@ -207,6 +241,17 @@ function normalize(raw: Partial<Config> | null): Config {
     const dirs = new Set<string>();
     p.spaces = (p.spaces ?? []).filter((s) => s.dir && !dirs.has(s.dir) && dirs.add(s.dir));
     if (!p.spaces.some((s) => s.dir === p.path)) p.spaces.unshift({ id: uid(), name: p.name, dir: p.path });
+    // 003: spaces have no icon/color of their own; project icons became typed.
+    for (const s of p.spaces as (Space & { icon?: unknown; color?: unknown })[]) {
+      delete s.icon;
+      delete s.color;
+    }
+    if (typeof p.icon === "string") p.icon = { type: "symbol", value: p.icon };
+    if (!p.color || !p.icon) {
+      const next = nextIdentity(c.projects); // older projects get distinct defaults too
+      p.color ??= next.color;
+      p.icon ??= next.icon;
+    }
   }
   c.layout.terms = c.layout.terms.filter((t) => !t.scriptId || c.scripts[t.scriptId]);
   const termKeys = new Set(c.layout.terms.map((t) => t.key));
@@ -223,7 +268,7 @@ export async function saveNow() {
   const tabKeys = new Set(config.layout.tabs.flatMap((t) => (t.kind === "terminal" ? [t.key] : [])));
   const snaps: TermSnapshot[] = Object.values(terms)
     .filter((t) => tabKeys.has(t.key))
-    .map(({ key, name, projectId, scriptId, cwd, command, renamed, agent }) => ({ key, name, projectId, scriptId, cwd, command, renamed, agent }));
+    .map(({ key, name, projectId, scriptId, cwd, command, renamed, agent, detected }) => ({ key, name, projectId, scriptId, cwd, command, renamed, agent: detected ? undefined : agent }));
   await api.saveConfig({ ...config, layout: { ...config.layout, terms: snaps } }).catch((e) => notify(`Saving config failed: ${e}`));
 }
 
@@ -262,7 +307,8 @@ export function addProject(path: string) {
   updateConfig((c) => {
     const name = basename(path);
     const primary = { id: uid(), name, dir: path };
-    c.projects.push({ id, name, path, scriptIds: [], startScriptIds: [], spaces: [primary] });
+    const { color, icon } = nextIdentity(c.projects); // distinct from existing projects
+    c.projects.push({ id, name, path, color, icon, scriptIds: [], startScriptIds: [], spaces: [primary] });
     c.layout.activeProjectId = id;
     c.layout.activeSpaceId = primary.id;
   });
@@ -291,6 +337,9 @@ export function setActiveSpace(projectId: string, spaceId?: string) {
   if (!p) return;
   const l = get().config.layout;
   const sid = spaceId ?? (l.activeProjectId === projectId && p.spaces.some((s) => s.id === l.activeSpaceId) ? l.activeSpaceId : primarySpace(p)?.id) ?? null;
+  // Selecting a space counts as seeing its finished agents.
+  const dir = p.spaces.find((s) => s.id === sid)?.dir;
+  if (dir) markSeen(Object.values(get().terms).filter((t) => t.agent && spaceOfPath(t.cwd)?.dir === dir).map((t) => t.key));
   if (l.activeProjectId === projectId && l.activeSpaceId === sid) return;
   updateConfig((c) => {
     c.layout.activeProjectId = projectId;
@@ -299,8 +348,20 @@ export function setActiveSpace(projectId: string, spaceId?: string) {
 }
 export const setActiveProject = (id: string) => setActiveSpace(id);
 
+/** Clears the "finished, not yet seen" flag for these agent terminals. */
+export function markSeen(keys: string[]) {
+  const { agentStatus } = get();
+  const hit = keys.filter((k) => agentStatus[k]?.unseen);
+  if (!hit.length) return;
+  set((s) => {
+    const next = { ...s.agentStatus };
+    for (const k of hit) next[k] = { ...next[k], unseen: false };
+    return { agentStatus: next };
+  });
+}
+
 /** Name/icon/color; an empty name falls back to the folder name. */
-export const updateProject = (id: string, patch: Partial<Pick<Project, "name" | "icon" | "color">>) =>
+export const updateProject = (id: string, patch: Partial<Pick<Project, "name" | "icon" | "color" | "scriptsCollapsed">>) =>
   updateConfig((c) => {
     const p = c.projects.find((x) => x.id === id);
     if (!p) return;
@@ -455,10 +516,14 @@ function insertTab(c: Config, tab: Tab) {
   c.layout.tabs.splice(i < 0 ? c.layout.tabs.length : i + 1, 0, tab);
 }
 
-export const activateTab = (id: string) => updateConfig((c) => void (c.layout.activeTab = id));
+export const activateTab = (id: string) => {
+  if (id.startsWith("term:")) markSeen([id.slice(5)]);
+  updateConfig((c) => void (c.layout.activeTab = id));
+};
 
 export function openTerminalTab(key: string, activate = true) {
   const id = `term:${key}`;
+  if (activate) markSeen([key]);
   updateConfig((c) => {
     if (!c.layout.tabs.some((t) => t.id === id)) insertTab(c, { id, kind: "terminal", key });
     if (activate) c.layout.activeTab = id;
@@ -495,8 +560,9 @@ export function pinTab(id: string) {
 }
 
 /** Diffs share one tab slot, like a preview. */
-export function openDiff(repo: string, f: FileEntry, staged: boolean) {
-  const tab: Tab = { id: `diff:${staged ? "s" : "w"}:${repo}:${f.path}`, kind: "diff", repo, path: f.path, orig: f.orig, staged };
+/** `head`: HEAD ↔ working tree (commit panel); otherwise HEAD ↔ index (staged) or index ↔ working tree. */
+export function openDiff(repo: string, f: FileEntry, staged: boolean, head = false) {
+  const tab: Tab = { id: `diff:${head ? "h" : staged ? "s" : "w"}:${repo}:${f.path}`, kind: "diff", repo, path: f.path, orig: f.orig, staged, head };
   updateConfig((c) => {
     const i = c.layout.tabs.findIndex((t) => t.kind === "diff");
     if (i >= 0) c.layout.tabs[i] = tab;
@@ -527,7 +593,7 @@ export async function closeTab(id: string | null) {
 /** Saves the script and makes it appear in exactly `projectIds` (one shared script/process across them). */
 export function saveScript(projectIds: string[], script: Script) {
   updateConfig((c) => {
-    c.scripts[script.id] = script;
+    c.scripts[script.id] = { lastRunAt: c.scripts[script.id]?.lastRunAt, ...script };
     for (const p of c.projects) {
       const want = projectIds.includes(p.id);
       const has = p.scriptIds.includes(script.id);
@@ -617,7 +683,10 @@ export async function boot() {
   config.projects.forEach((p) => discover(p.id));
   syncWatch();
   listen<string[]>("fs-changed", (e) => handleFsChange(e.payload));
-  listen<State["mem"]>("mem-stats", (e) => set({ mem: e.payload }));
+  listen<State["mem"]>("mem-stats", (e) => {
+    set({ mem: e.payload });
+    if (e.payload.procs) detectAgents(e.payload.procs);
+  });
   listen<string>("menu", (e) => onMenu(e.payload));
   listen("quit-requested", onQuitRequested);
 }
