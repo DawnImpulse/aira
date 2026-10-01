@@ -1,7 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, type ProjectIcon as ProjectIconValue } from "../ipc";
-import { addSpace, basename, isUnder, joinPath, notify, openFile, removeProject, removeSpace, updateProject, updateSpace, useStore } from "../store";
+import { addSpace, basename, isUnder, joinPath, notify, openFile, pickFolder, removeProject, removeSpace, updateProject, updateSpace, useStore } from "../store";
 import { isSingleEmoji, PROJECT_COLORS, PROJECT_EMOJIS, PROJECT_ICONS } from "../lib/identity";
 import { AGENTS } from "../lib/agents";
 import { cx, Icon, Modal, ProjectIcon } from "./ui";
@@ -18,8 +18,8 @@ export function SpaceDialog({ projectId, spaceId, dir: presetDir, onClose }: { p
   const isPrimary = !!space && space.dir === project.path;
 
   const choose = async () => {
-    const d = await openDialog({ directory: true, defaultPath: dir || project.path, title: "Space folder" });
-    if (typeof d !== "string") return;
+    const d = await pickFolder(dir || project.path, "Space folder");
+    if (!d) return;
     setDir(d);
     if (!name.trim()) setName(basename(d));
   };

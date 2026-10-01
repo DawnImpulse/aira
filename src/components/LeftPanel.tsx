@@ -2,7 +2,7 @@ import { Fragment, useRef, useState, type CSSProperties } from "react";
 import { BorderBeam } from "border-beam";
 import { api, type GitStatus, type Project, type Space } from "../ipc";
 import {
-  ago, discover, isFailed, notify, openFolders, openTerminalTab, removeScript, removeSpace, repoOf, selectActiveSpace,
+  ago, discover, focusTerminal, isFailed, notify, openFolders, removeScript, removeSpace, repoOf, selectActiveSpace,
   setActiveSpace, spaceChanges, spaceOfPath, toggleCollapsed, toggleStar, toggleStartScript, updateConfig, updateProject, useStore,
   type AgentStatus, type SubAgentNode, type Term,
 } from "../store";
@@ -81,12 +81,6 @@ function SpacesView({ projects }: { projects: Project[] }) {
 }
 
 function ProjectSection({ project: p }: { project: Project }) {
-  const active = useStore((s) => s.config.layout.activeProjectId === p.id);
-  // Beam only while one of this project's agents is actively working.
-  const agentWorking = useStore((s) =>
-    Object.values(s.terms).some((t) => t.agent && t.projectId === p.id && t.status === "running" && s.agentStatus[t.key]?.state === "working"),
-  );
-  const theme = useStore((s) => s.config.settings.theme);
   const [editing, setEditing] = useState(false);
   // Single click toggles collapse; wait a beat so a double-click (rename) doesn't also toggle.
   const clickTimer = useRef<number | undefined>(undefined);
@@ -95,8 +89,8 @@ function ProjectSection({ project: p }: { project: Project }) {
     clearTimeout(clickTimer.current);
     clickTimer.current = window.setTimeout(() => toggleCollapsed(p.id), 220);
   };
-  const section = (
-    <section className={cx("project", active && "active", p.collapsed && "collapsed")} style={projectStyle(p)}>
+  return (
+    <section className={cx("project", p.collapsed && "collapsed")} style={projectStyle(p)}>
       <div className="project-head" onClick={onHeadClick} title={p.collapsed ? "Click to expand" : "Click to collapse"}>
         <IconButton icon={p.collapsed ? "chevron_right" : "expand_more"} title={p.collapsed ? "Expand" : "Collapse"} onClick={stop(() => toggleCollapsed(p.id))} />
         <ProjectIcon icon={p.icon} color={p.color ?? "var(--accent)"} size={18} />
@@ -144,25 +138,12 @@ function ProjectSection({ project: p }: { project: Project }) {
       )}
     </section>
   );
-  if (!agentWorking) return section;
-  const dark = theme === "system" ? document.documentElement.dataset.theme !== "light" : theme === "dark";
-  return (
-    <BorderBeam size="md" colorVariant="ocean" theme={dark ? "dark" : "light"} borderRadius={12} strength={0.7} active={!reducedMotion.matches}>
-      {section}
-    </BorderBeam>
-  );
 }
 
 /** Orca-style space: git status plus every agent terminal running in it. Only the selected one is highlighted. */
 function SpaceCard({ project, space, showProject }: { project: Project; space: Space; showProject?: boolean }) {
   useNow();
   const selected = useStore((s) => s.config.layout.activeProjectId === project.id && selectActiveSpace(s)?.id === space.id);
-  const projectRepos = useStore((s) => s.repos[project.id]);
-  const statuses = useStore((s) => s.status);
-  const repo = repoOf(space.dir);
-  const st = repo ? statuses[repo.path] : undefined;
-  // Other git repos inside the space's folder (e.g. a workspace dir holding several repos).
-  const nested = (projectRepos ?? []).filter((r) => r.kind !== "worktree" && r.path !== repo?.path && r.path.startsWith(space.dir + "/"));
   const terms = useStore((s) => s.terms);
   const agentStatus = useStore((s) => s.agentStatus);
   const subagents = useStore((s) => s.subagents);
@@ -172,16 +153,13 @@ function SpaceCard({ project, space, showProject }: { project: Project; space: S
   const scripts = mine.filter((t) => t.scriptId);
   const running = scripts.some((t) => t.status === "running" || t.status === "stopping");
   const failed = !running && scripts.some(isFailed);
-  const changes = repo ? spaceChanges(space.dir, repo.path, st) : undefined;
   const isPrimary = space.dir === project.path;
   const finishedUnseen = agents.some((t) => agentStatus[t.key]?.unseen);
-  const init = () =>
-    api
-      .init(space.dir)
-      .then(() => discover(project.id))
-      .catch(notify);
+  // Beam only while one of this space's agents is actively working.
+  const working = agents.some((t) => t.status === "running" && agentStatus[t.key]?.state === "working");
+  const theme = useStore((s) => s.config.settings.theme);
 
-  return (
+  const card = (
     <div
       className={cx("space-card", selected && "selected", finishedUnseen && "agent-done")}
       onClick={() => setActiveSpace(project.id, space.id)}
@@ -211,23 +189,7 @@ function SpaceCard({ project, space, showProject }: { project: Project; space: S
           <Icon name="star" size={15} />
         </button>
       </div>
-      {nested.length ? (
-        // Several repos: no branch, just "N of M Git Repos" + all changes combined (breakdown in the tooltip).
-        <MultiRepoLine
-          repos={[
-            ...(repo ? [[repoName(repo.path), changes?.length ?? 0] as const] : []),
-            ...nested.map((r) => [r.path.slice(space.dir.length + 1), statuses[r.path]?.files.length ?? 0] as const),
-          ]}
-        />
-      ) : repo ? (
-        <RepoLine st={st} changed={changes?.length ?? 0} />
-      ) : (
-        <div className="card-sub">
-          <button className="link-btn" onClick={stop(init)} title="Run git init in this folder">
-            Initialize git
-          </button>
-        </div>
-      )}
+      <SpaceGit project={project} space={space} />
       {agents.length > 0 && (
         <div className="agent-rows">
           {agents.map((t) => (
@@ -240,9 +202,51 @@ function SpaceCard({ project, space, showProject }: { project: Project; space: S
       )}
     </div>
   );
+  if (!working) return card;
+  const dark = theme === "system" ? document.documentElement.dataset.theme !== "light" : theme === "dark";
+  return (
+    <BorderBeam size="md" colorVariant="ocean" theme={dark ? "dark" : "light"} borderRadius={10} strength={0.7} active={!reducedMotion.matches}>
+      {card}
+    </BorderBeam>
+  );
 }
 
 const repoName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+
+/** A space's git line (space card and project bar): branch + changes, or repo count + changes for several repos. */
+export function SpaceGit({ project, space }: { project: Project; space: Space }) {
+  const projectRepos = useStore((s) => s.repos[project.id]);
+  const statuses = useStore((s) => s.status);
+  const repo = repoOf(space.dir);
+  const st = repo ? statuses[repo.path] : undefined;
+  const changes = repo ? spaceChanges(space.dir, repo.path, st) : undefined;
+  // Other git repos inside the space's folder (e.g. a workspace dir holding several repos).
+  const nested = (projectRepos ?? []).filter((r) => r.kind !== "worktree" && r.path !== repo?.path && r.path.startsWith(space.dir + "/"));
+  const init = () =>
+    api
+      .init(space.dir)
+      .then(() => discover(project.id))
+      .catch(notify);
+  if (nested.length) {
+    // Several repos: no branch, just "N of M Git Repos" + all changes combined (breakdown in the tooltip).
+    return (
+      <MultiRepoLine
+        repos={[
+          ...(repo ? [[repoName(repo.path), changes?.length ?? 0] as const] : []),
+          ...nested.map((r) => [r.path.slice(space.dir.length + 1), statuses[r.path]?.files.length ?? 0] as const),
+        ]}
+      />
+    );
+  }
+  if (repo) return <RepoLine st={st} changed={changes?.length ?? 0} />;
+  return (
+    <div className="card-sub">
+      <button className="link-btn" onClick={stop(init)} title="Run git init in this folder">
+        Initialize git
+      </button>
+    </div>
+  );
+}
 
 /** A single-repo space's git line: branch, ahead/behind, changed files. */
 function RepoLine({ st, changed }: { st?: GitStatus; changed: number }) {
@@ -280,7 +284,7 @@ function AgentRow({ t, st }: { t: Term; st?: AgentStatus }) {
     : working ? "Working" : st?.state === "waiting" ? "Needs input" : st?.everWorked ? "Done" : "Idle";
   const name = t.renamed ? t.name : (a?.label ?? "Agent");
   return (
-    <div className="agent-row" onClick={stop(() => openTerminalTab(t.key))} title={`${t.name} — click to open`}>
+    <div className="agent-row" onClick={stop(() => focusTerminal(t.key))} title={`${t.name} — click to open`}>
       {working ? <Spinner size={12} color={a?.color} title="Working" /> : <AgentIcon agent={t.agent} size={14} />}
       <span className="ellipsis">
         <span className={cx(working && "working-label", st?.state === "waiting" && live && "waiting-label")}>{label}</span> – {name}
@@ -404,6 +408,12 @@ function ScriptRow({ project, id, inProject }: { project: Project; id: string; i
   const live = isLive(t);
   const foreign = s.ownerProjectId !== project.id;
   const inStart = project.startScriptIds.includes(id);
+  // The terminal tab opens in the active space, so select this row's project first.
+  const inProjectSpace = (fn: () => void) =>
+    stop(() => {
+      setActiveSpace(project.id);
+      fn();
+    });
   return (
     <div
       className={cx("script-row", live && "live")}
@@ -425,11 +435,11 @@ function ScriptRow({ project, id, inProject }: { project: Project; id: string; i
       <span className="hover-actions">
         {live ? (
           <>
-            <IconButton icon="restart_alt" title="Restart" onClick={stop(() => restart(id))} />
+            <IconButton icon="restart_alt" title="Restart" onClick={inProjectSpace(() => restart(id))} />
             <IconButton icon="stop" title="Stop" className="red" onClick={stop(() => stopTerm(id))} />
           </>
         ) : (
-          <IconButton icon="play_arrow" title="Run" className="green" onClick={stop(() => runScript(id))} />
+          <IconButton icon="play_arrow" title="Run" className="green" onClick={inProjectSpace(() => runScript(id))} />
         )}
         <IconButton icon="edit" title="Edit" onClick={stop(() => openScriptDialog(project.id, id))} />
         <IconButton icon={foreign ? "link_off" : "delete"} title={foreign ? "Unlink" : "Delete"} onClick={stop(() => removeScript(project.id, id))} />

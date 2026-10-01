@@ -78,19 +78,25 @@ export type Tab =
   | { id: string; kind: "file"; path: string; pinned: boolean }
   | { id: string; kind: "diff"; repo: string; path: string; orig: string | null; staged: boolean; head?: boolean };
 
+/** A space's own main tabs and right panel choice. */
+export interface SpaceView {
+  tabs: Tab[];
+  activeTab: string | null;
+  rightView: "files" | "git";
+}
+
 export interface Config {
   projects: Project[];
   scripts: Record<string, Script>;
   settings: Settings;
-  layout: {
-    tabs: Tab[];
-    activeTab: string | null;
+  layout: SpaceView & {
     activeProjectId: string | null;
     terms: TermSnapshot[];
     runningAtQuit: string[];
-    rightView: "files" | "git";
     activeSpaceId: string | null;
     leftView: "projects" | "spaces" | "scripts";
+    /** Every space's view but the active one's (which is tabs/activeTab/rightView above). */
+    views: Record<string, SpaceView>;
   };
 }
 

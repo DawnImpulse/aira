@@ -6,7 +6,7 @@ import { Channel } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
 import { api, type HookEvent, type PtyMessage, type Script, type Settings } from "../ipc";
-import { notify, openTerminalTab, projectById, scriptCwd, spaceOfPath, uid, updateConfig, useStore, type AgentStatus, type Term } from "../store";
+import { dropTab, notify, openTerminalTab, projectById, scriptCwd, setActiveProject, spaceOfPath, uid, updateConfig, useStore, type AgentStatus, type Term } from "../store";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { agentById, type Agent } from "./agents";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -233,20 +233,8 @@ export function removeTerm(key: string, closeTab = false) {
     const { [key]: _, ...terms } = s.terms;
     return { terms };
   });
-  if (closeTab) {
-    const id = `term:${key}`;
-    const { tabs, activeTab } = get().config.layout;
-    const i = tabs.findIndex((t) => t.id === id);
-    if (i >= 0) {
-      const rest = tabs.filter((t) => t.id !== id);
-      useStore.setState((s) => ({
-        config: {
-          ...s.config,
-          layout: { ...s.config.layout, tabs: rest, activeTab: activeTab === id ? ((rest[i] ?? rest[i - 1])?.id ?? null) : activeTab },
-        },
-      }));
-    }
-  }
+  // Any space's view may hold it (a shell can exit in a space you're not looking at).
+  if (closeTab) updateConfig((c) => [c.layout, ...Object.values(c.layout.views)].forEach((v) => dropTab(v, `term:${key}`)));
 }
 
 /**
@@ -306,6 +294,7 @@ export function showScript(scriptId: string, projectId: string) {
 export function runStart(projectId: string) {
   const p = projectById(projectId);
   if (!p) return;
+  setActiveProject(projectId); // its tabs open in its space
   const picked = p.startScriptIds.filter((id) => p.scriptIds.includes(id));
   (picked.length ? picked : p.scriptIds).forEach((id, i) => runScript(id, i === 0));
 }

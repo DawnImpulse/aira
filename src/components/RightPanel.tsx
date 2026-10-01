@@ -13,8 +13,14 @@ import { cx, Icon, IconButton, ProjectIcon, stop } from "./ui";
 
 export function RightPanel() {
   const view = useStore((s) => s.config.layout.rightView);
+  const views = useStore((s) => s.config.layout.views);
+  const projects = useStore((s) => s.config.projects);
   const project = useStore((s) => s.config.projects.find((p) => p.id === s.config.layout.activeProjectId));
   const space = useStore(selectActiveSpace);
+  // ponytail: every space opened this session stays mounted (hidden), so its tree expansion, scroll and
+  // commit draft survive switching. Ceiling: one FileTree/GitPanel per visited space; evict the least recent if that gets heavy.
+  const visited = useRef(new Set<string>()).current;
+  if (space) visited.add(space.id);
   const changes = useStore((s) =>
     project ? gitReposOf(project, s.repos[project.id]).reduce((n, r) => n + (s.status[r.path]?.files.length ?? 0), 0) : 0,
   );
@@ -35,11 +41,21 @@ export function RightPanel() {
         <div className="empty-hint">
           <p>No project selected.</p>
         </div>
-      ) : view === "files" ? (
-        // Keyed by dir: switching spaces starts a fresh tree (no stale expansion/listings).
-        <FileTree key={space.dir} project={project} space={space} />
       ) : (
-        <GitPanel project={project} />
+        projects.flatMap((p) =>
+          p.spaces
+            .filter((s) => visited.has(s.id))
+            .map((s) => (
+              <div key={s.id} className="right-body" hidden={s.id !== space.id}>
+                {(s.id === space.id ? view : (views[s.id]?.rightView ?? "files")) === "files" ? (
+                  // Keyed by dir: a space moved to another folder starts a fresh tree.
+                  <FileTree key={s.dir} project={p} space={s} />
+                ) : (
+                  <GitPanel project={p} space={s} />
+                )}
+              </div>
+            )),
+        )
       )}
     </div>
   );

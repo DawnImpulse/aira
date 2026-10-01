@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import type { Script } from "../ipc";
-import { joinPath, linkScript, projectById, projectOf, saveScript, uid, useStore } from "../store";
+import { joinPath, linkScript, pickFolder, projectById, projectOf, saveScript, uid, useStore } from "../store";
 import { newTerminal, runScript } from "../lib/terminals";
 import { availableRunners, detectScripts, RUNNERS, runnerById, type Detected } from "../lib/runners";
 import { iconUrl } from "../lib/icons";
@@ -13,23 +12,14 @@ export function ScriptDialog({ projectId, scriptId, preset, onClose }: { project
     () => existing ?? { id: uid(), name: "", runner: "", target: "", command: "", cwd: "", ownerProjectId: projectId, ...preset },
   );
   const projects = useStore((st) => st.config.projects);
-  const [targets, setTargets] = useState<string[]>(() =>
+  // A new script belongs to this project only (link it elsewhere via Link); an edit keeps its links.
+  const [targets] = useState<string[]>(() =>
     existing ? projects.filter((p) => p.scriptIds.includes(existing.id)).map((p) => p.id) : [projectId],
   );
   const [avail, setAvail] = useState<Set<string> | null>(null);
   const [detected, setDetected] = useState<Detected[]>([]);
   // Opened from a package.json ▶: the script is already chosen, so skip detection.
   const fromGutter = !existing && !!preset?.target;
-  // Folder chosen on purpose (gutter ▶, edit, Choose…) stays put when switching projects;
-  // a fresh "+" script follows the selected project's root instead.
-  const [cwdPinned, setCwdPinned] = useState(!!existing || fromGutter);
-
-  const toggleTarget = (id: string) => {
-    const next = targets.includes(id) ? targets.filter((x) => x !== id) : [...targets, id];
-    if (!next.length) return;
-    setTargets(next);
-    if (!cwdPinned && s.ownerProjectId !== null && !next.includes(s.ownerProjectId)) setS({ ...s, ownerProjectId: next[0], cwd: "" });
-  };
   const owner = projectById(s.ownerProjectId);
   const absCwd = owner ? joinPath(owner.path, s.cwd) : s.cwd;
 
@@ -46,11 +36,10 @@ export function ScriptDialog({ projectId, scriptId, preset, onClose }: { project
   const runner = runnerById(s.runner || "custom");
   const command = runner.command(s.target.trim());
 
-  const pickFolder = async () => {
-    const dir = await openDialog({ directory: true, defaultPath: absCwd, title: "Working directory" });
-    if (typeof dir !== "string") return;
+  const chooseFolder = async () => {
+    const dir = await pickFolder(absCwd, "Working directory");
+    if (!dir) return;
     const home = projectOf(dir);
-    setCwdPinned(true);
     setS(home ? { ...s, ownerProjectId: home.id, cwd: dir === home.path ? "" : dir.slice(home.path.length + 1) } : { ...s, ownerProjectId: null, cwd: dir });
   };
 
@@ -76,33 +65,11 @@ export function ScriptDialog({ projectId, scriptId, preset, onClose }: { project
           save(false);
         }}
       >
-        {projects.length > 1 && (
-          <div className="field">
-            <span>Show in</span>
-            <div className="chips">
-              {projects.map((p) => (
-                <button
-                  type="button"
-                  key={p.id}
-                  className={cx("chip-btn", targets.includes(p.id) && "on")}
-                  title={p.path}
-                  aria-pressed={targets.includes(p.id)}
-                  onClick={() => toggleTarget(p.id)}
-                >
-                  <Icon name="data_object" size={14} className="accent" />
-                  {p.name}
-                </button>
-              ))}
-            </div>
-            {targets.length > 1 && <small className="dim">One shared script – running it shows the same process in each project.</small>}
-          </div>
-        )}
-
         <label className="field">
           <span>Working directory</span>
           <div className="row">
             <code className="path-box" title={absCwd}>{absCwd}</code>
-            <button type="button" className="btn" onClick={pickFolder}>Choose…</button>
+            <button type="button" className="btn" onClick={chooseFolder}>Choose…</button>
           </div>
           {s.ownerProjectId === null && <small className="dim">External folder – not part of any project</small>}
         </label>

@@ -325,6 +325,43 @@ textarea {
   flex: 1;
   min-height: 0;
 }
+/* Main + right windows of the selected space, under one project-colored bar. */
+.work {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+}
+.project-bar {
+  height: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--project-color) 16%, var(--panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--project-color) 45%, var(--border));
+}
+.project-bar b {
+  color: var(--project-color);
+}
+.project-bar .card-sub {
+  padding-left: 6px;
+  gap: 4px;
+}
+.project-bar .card-sub .changes {
+  margin-left: 4px;
+}
+.right-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.right-body[hidden] {
+  display: none;
+}
 .sep {
   width: 1px;
   background: var(--border);
@@ -426,9 +463,6 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.project.active .project-name {
-  color: var(--text);
 }
 .project-body {
   padding: 2px 8px 0 10px;
@@ -1317,50 +1351,6 @@ textarea {
   background: var(--border);
 }
 
-/* ---------- git: one colored section per repo ---------- */
-.repo-section {
-  border-left: 3px solid var(--repo-color);
-  margin: 0 0 6px;
-}
-.repo-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px 0 6px;
-  cursor: pointer;
-  background: color-mix(in srgb, var(--repo-color) 8%, transparent);
-}
-.repo-head:hover {
-  background: color-mix(in srgb, var(--repo-color) 14%, transparent);
-}
-.repo-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--repo-color);
-  flex-shrink: 0;
-}
-.repo-name {
-  font-weight: 600;
-  flex: 1;
-}
-.repo-sync {
-  padding: 6px 10px 6px 8px;
-}
-.repo-sync .popover-anchor {
-  max-width: 55%;
-}
-.repo-sync .btn.small {
-  gap: 3px;
-}
-.repo-body .commit-box {
-  padding-top: 2px;
-}
-.git.scroll {
-  padding-top: 2px;
-}
-
 /* ---------- files: hover actions ---------- */
 .tree-row .hover-actions {
   margin-left: auto;
@@ -1445,22 +1435,22 @@ textarea {
   margin: 6px 6px 10px 8px;
   padding: 0 0 6px 8px;
 }
-/* Bracket in the project color, wrapping the top and bottom corners. */
+/* Plain vertical bar in the project color. */
 .project::before {
   content: "";
   position: absolute;
   left: 0;
   top: 2px;
-  bottom: 2px; /* symmetric, so a collapsed project's bracket centers on its header */
-  width: 9px;
-  border: 2px solid var(--project-color);
-  border-right: 0;
-  border-radius: 9px 0 0 9px;
+  bottom: 2px; /* symmetric, so a collapsed project's bar centers on its header */
+  width: 3px;
+  border-radius: 2px;
+  background: var(--project-color);
   pointer-events: none;
 }
 .project-head {
   height: 34px;
   padding-left: 2px;
+  border-radius: 8px;
 }
 .project.collapsed {
   padding-bottom: 0;
@@ -1479,9 +1469,6 @@ textarea {
 }
 .space-card .card-sub {
   padding-left: 0;
-}
-.space-card.selected {
-  border-color: color-mix(in srgb, var(--project-color) 65%, var(--border-strong));
 }
 .space-project {
   display: inline-flex;
@@ -1732,7 +1719,6 @@ textarea {
 .tree-node.root {
   margin: 0 6px;
   border-radius: 7px;
-  box-shadow: inset 3px 0 0 var(--amber);
 }
 .tree-node.focused {
   background: var(--active);

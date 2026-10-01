@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { api, type Branches, type FileEntry, type Project, type Repo } from "../ipc";
+import { api, type Branches, type FileEntry, type Project, type Repo, type Space } from "../ipc";
 import {
-  addSpace, basename, discover, dirname, excludesFor, gitReposOf, isUnder, notify, openDiff, openFile, refreshStatus, selectActiveSpace,
+  addSpace, basename, discover, dirname, excludesFor, gitReposOf, isUnder, notify, openDiff, openFile, refreshStatus,
   setActiveSpace, updateConfig, useStore,
 } from "../store";
 import { newTerminal } from "../lib/terminals";
@@ -20,11 +20,10 @@ const fileClass = (f: FileEntry) =>
 const fileLetter = (f: FileEntry) => (f.conflict ? "!" : f.x === "?" ? "U" : f.y !== "." ? f.y : f.x);
 
 /** WebStorm-style Commit panel: one tree of changes across the project's repos, one commit area. */
-export function GitPanel({ project }: { project: Project }) {
+export function GitPanel({ project, space }: { project: Project; space: Space }) {
   const all = useStore((s) => s.repos[project.id]);
   const status = useStore((s) => s.status);
   const ai = useStore((s) => s.config.settings.ai);
-  const activeSpace = useStore(selectActiveSpace);
   const [sel, setSel] = useState<Selection>({ repo: null, paths: new Set() });
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [rootOpen, setRootOpen] = useState(true);
@@ -49,10 +48,10 @@ export function GitPanel({ project }: { project: Project }) {
   const clean = repos.filter((r) => !changed.includes(r));
   const total = changed.reduce((n, r) => n + filesOf(r.path).length, 0);
 
-  // Default selection: everything in the active space's repo (or the first changed repo).
+  // Default selection: everything in this space's repo (or the first changed repo).
   useEffect(() => {
     if (sel.repo && changed.some((r) => r.path === sel.repo)) return;
-    const pick = changed.find((r) => activeSpace && isUnder(activeSpace.dir, r.path)) ?? changed[0];
+    const pick = changed.find((r) => isUnder(space.dir, r.path)) ?? changed[0];
     if (pick) {
       setSel({ repo: pick.path, paths: new Set(filesOf(pick.path).map((f) => f.path)) });
       setOpen((o) => new Set(o).add(pick.path));

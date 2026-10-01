@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { formatBytes, isFailed, openTerminalTab, projectById, repoOf, selectActiveSpace, useStore, type Term } from "../store";
+import { formatBytes, isFailed, focusTerminal, projectById, repoOf, selectActiveSpace, useStore, type Term } from "../store";
 import { removeTerm, renameTerm, stop as stopTerm } from "../lib/terminals";
 import { cx, Icon, IconButton, stop } from "./ui";
 
@@ -76,7 +76,7 @@ function TermRow({ t, mem, onOpen }: { t: Term; mem?: number; onOpen: () => void
     <div
       className="menu-item term-row"
       onClick={() => {
-        openTerminalTab(t.key);
+        focusTerminal(t.key);
         onOpen();
       }}
       title={t.cwd}

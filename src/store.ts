@@ -3,7 +3,7 @@ import type { PanelImperativeHandle } from "react-resizable-panels";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
-import { api, type Config, type FileEntry, type GitStatus, type Project, type Repo, type Script, type Space, type Tab, type TermSnapshot } from "./ipc";
+import { api, type Config, type FileEntry, type GitStatus, type Project, type Repo, type Script, type Space, type SpaceView, type Tab, type TermSnapshot } from "./ipc";
 import { disposeModel, reloadIfClean, setEditorTheme } from "./lib/monaco";
 import { newTerminal, removeTerm, setTerminalTheme } from "./lib/terminals";
 import { nextIdentity } from "./lib/identity";
@@ -90,6 +90,7 @@ const DEFAULT_CONFIG: Config = {
     rightView: "files",
     activeSpaceId: null,
     leftView: "projects",
+    views: {},
   },
 };
 
@@ -255,9 +256,17 @@ function normalize(raw: Partial<Config> | null): Config {
   }
   c.layout.terms = c.layout.terms.filter((t) => !t.scriptId || c.scripts[t.scriptId]);
   const termKeys = new Set(c.layout.terms.map((t) => t.key));
-  c.layout.tabs = c.layout.tabs.filter((t) => t.kind !== "terminal" || termKeys.has(t.key));
-  if (!c.layout.tabs.some((t) => t.id === c.layout.activeTab)) c.layout.activeTab = c.layout.tabs[0]?.id ?? null;
   if (!c.projects.some((p) => p.id === c.layout.activeProjectId)) c.layout.activeProjectId = c.projects[0]?.id ?? null;
+  // The open tabs belong to the active space (pre-007 configs: every tab lands in it).
+  const active = c.projects.find((p) => p.id === c.layout.activeProjectId);
+  if (!active?.spaces.some((s) => s.id === c.layout.activeSpaceId)) c.layout.activeSpaceId = (active && primarySpace(active)?.id) ?? null;
+  const spaceIds = new Set(c.projects.flatMap((p) => p.spaces.map((s) => s.id)));
+  c.layout.views = { ...c.layout.views };
+  for (const id of Object.keys(c.layout.views)) if (!spaceIds.has(id) || id === c.layout.activeSpaceId) delete c.layout.views[id];
+  for (const v of [c.layout, ...Object.values(c.layout.views)]) {
+    v.tabs = v.tabs.filter((t) => t.kind !== "terminal" || termKeys.has(t.key));
+    if (!v.tabs.some((t) => t.id === v.activeTab)) v.activeTab = v.tabs[0]?.id ?? null;
+  }
   return c;
 }
 
@@ -265,7 +274,8 @@ let saveTimer: number | undefined;
 export async function saveNow() {
   clearTimeout(saveTimer);
   const { config, terms } = get();
-  const tabKeys = new Set(config.layout.tabs.flatMap((t) => (t.kind === "terminal" ? [t.key] : [])));
+  const tabs = [config.layout, ...Object.values(config.layout.views)].flatMap((v) => v.tabs);
+  const tabKeys = new Set(tabs.flatMap((t) => (t.kind === "terminal" ? [t.key] : [])));
   const snaps: TermSnapshot[] = Object.values(terms)
     .filter((t) => tabKeys.has(t.key))
     .map(({ key, name, projectId, scriptId, cwd, command, renamed, agent, detected }) => ({ key, name, projectId, scriptId, cwd, command, renamed, agent: detected ? undefined : agent }));
@@ -292,6 +302,40 @@ export function applySettings() {
 
 // ---------- projects ----------
 
+/**
+ * Selects a space; each space keeps its own main tabs and right panel view.
+ * The active space's view lives in layout.tabs/activeTab/rightView, the others wait in layout.views.
+ */
+function showSpace(c: Config, projectId: string | null, spaceId: string | null) {
+  const l = c.layout;
+  if (l.activeSpaceId !== spaceId) {
+    const stillThere = c.projects.some((p) => p.spaces.some((s) => s.id === l.activeSpaceId));
+    if (l.activeSpaceId && stillThere) l.views[l.activeSpaceId] = { tabs: l.tabs, activeTab: l.activeTab, rightView: l.rightView };
+    const v: SpaceView = (spaceId && l.views[spaceId]) || { tabs: [], activeTab: null, rightView: "files" };
+    if (spaceId) delete l.views[spaceId];
+    Object.assign(l, v);
+  }
+  l.activeProjectId = projectId;
+  l.activeSpaceId = spaceId;
+}
+
+/** Removes a tab from a view; its neighbour becomes active. */
+export function dropTab(v: SpaceView, id: string) {
+  const i = v.tabs.findIndex((t) => t.id === id);
+  if (i < 0) return;
+  v.tabs.splice(i, 1);
+  if (v.activeTab === id) v.activeTab = (v.tabs[i] ?? v.tabs[i - 1])?.id ?? null;
+}
+
+/** Folder picker that opens inside `dir`. */
+export async function pickFolder(dir: string, title: string) {
+  // ponytail: macOS shows a folder given as the start path selected in its parent; starting at a
+  // file inside it lands in it. A folder holding only subfolders still gets the old behaviour.
+  const file = (await api.readDir(dir).catch(() => [])).find((e) => !e.dir && !e.name.startsWith("."));
+  const picked = await openDialog({ directory: true, defaultPath: file?.path ?? dir, title }).catch((e) => void notify(e));
+  return typeof picked === "string" ? picked : null;
+}
+
 export async function openFolders() {
   const sel = await openDialog({ directory: true, multiple: true, title: "Open Folder(s) as Projects" }).catch((e) => {
     notify(`Could not open folder picker: ${e}`);
@@ -309,8 +353,7 @@ export function addProject(path: string) {
     const primary = { id: uid(), name, dir: path };
     const { color, icon } = nextIdentity(c.projects); // distinct from existing projects
     c.projects.push({ id, name, path, color, icon, scriptIds: [], startScriptIds: [], spaces: [primary] });
-    c.layout.activeProjectId = id;
-    c.layout.activeSpaceId = primary.id;
+    showSpace(c, id, primary.id);
   });
   discover(id);
 }
@@ -322,7 +365,9 @@ export async function removeProject(id: string) {
     c.projects = c.projects.filter((x) => x.id !== id);
     for (const [sid, s] of Object.entries(c.scripts)) if (s.ownerProjectId === id) delete c.scripts[sid];
     for (const x of c.projects) x.scriptIds = x.scriptIds.filter((s) => c.scripts[s]);
-    if (c.layout.activeProjectId === id) c.layout.activeProjectId = c.projects[0]?.id ?? null;
+    for (const s of p.spaces) delete c.layout.views[s.id];
+    const next = c.projects[0];
+    if (c.layout.activeProjectId === id) showSpace(c, next?.id ?? null, (next && primarySpace(next)?.id) ?? null);
   });
   set((s) => {
     const { [id]: _, ...repos } = s.repos;
@@ -341,10 +386,7 @@ export function setActiveSpace(projectId: string, spaceId?: string) {
   const dir = p.spaces.find((s) => s.id === sid)?.dir;
   if (dir) markSeen(Object.values(get().terms).filter((t) => t.agent && spaceOfPath(t.cwd)?.dir === dir).map((t) => t.key));
   if (l.activeProjectId === projectId && l.activeSpaceId === sid) return;
-  updateConfig((c) => {
-    c.layout.activeProjectId = projectId;
-    c.layout.activeSpaceId = sid;
-  });
+  updateConfig((c) => showSpace(c, projectId, sid));
 }
 export const setActiveProject = (id: string) => setActiveSpace(id);
 
@@ -377,8 +419,7 @@ export function addSpace(projectId: string, space: Omit<Space, "id">) {
   const id = uid();
   updateConfig((c) => {
     c.projects.find((x) => x.id === projectId)?.spaces.push({ ...space, id, name: space.name.trim() || basename(space.dir) });
-    c.layout.activeProjectId = projectId;
-    c.layout.activeSpaceId = id;
+    showSpace(c, projectId, id);
   });
   discover(projectId); // also re-syncs the watcher (spaces outside the project get watched)
 }
@@ -402,7 +443,8 @@ export async function removeSpace(projectId: string, spaceId: string) {
     const x = c.projects.find((y) => y.id === projectId);
     if (!x) return;
     x.spaces = x.spaces.filter((y) => y.id !== spaceId);
-    if (c.layout.activeSpaceId === spaceId) c.layout.activeSpaceId = primarySpace(x)?.id ?? null;
+    delete c.layout.views[spaceId];
+    if (c.layout.activeSpaceId === spaceId) showSpace(c, projectId, primarySpace(x)?.id ?? null);
   });
   discover(projectId);
 }
@@ -530,6 +572,18 @@ export function openTerminalTab(key: string, activate = true) {
   });
 }
 
+/** Goes to the space whose view holds this terminal's tab (else the space of its folder) and shows it. */
+export function focusTerminal(key: string) {
+  const id = `term:${key}`;
+  const l = get().config.layout;
+  const sid = l.tabs.some((t) => t.id === id)
+    ? l.activeSpaceId
+    : (Object.keys(l.views).find((s) => l.views[s].tabs.some((t) => t.id === id)) ?? spaceOfPath(get().terms[key]?.cwd ?? "")?.id);
+  const p = get().config.projects.find((x) => x.spaces.some((s) => s.id === sid));
+  if (p && sid) setActiveSpace(p.id, sid);
+  openTerminalTab(key);
+}
+
 /** Single click opens a reusable preview tab; `pinned` (double click / edit) keeps it. */
 export function openFile(path: string, pinned = false) {
   const id = `file:${path}`;
@@ -580,12 +634,7 @@ export async function closeTab(id: string | null) {
   }
   // Plain shells die with their tab; script terminals keep running (reopen from the sidebar).
   if (tab.kind === "terminal" && !get().terms[tab.key]?.scriptId) removeTerm(tab.key);
-  updateConfig((c) => {
-    const i = c.layout.tabs.findIndex((t) => t.id === id);
-    if (i < 0) return;
-    c.layout.tabs.splice(i, 1);
-    if (c.layout.activeTab === id) c.layout.activeTab = (c.layout.tabs[i] ?? c.layout.tabs[i - 1])?.id ?? null;
-  });
+  updateConfig((c) => dropTab(c.layout, tab.id));
 }
 
 // ---------- scripts (config side; running lives in lib/terminals) ----------
