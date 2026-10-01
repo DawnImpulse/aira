@@ -5,8 +5,12 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Channel } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
-import { api, type PtyMessage, type Script, type Settings } from "../ipc";
-import { openTerminalTab, projectById, scriptCwd, uid, useStore, type AgentStatus, type Term } from "../store";
+import { api, type HookEvent, type PtyMessage, type Script, type Settings } from "../ipc";
+import { notify, openTerminalTab, projectById, scriptCwd, spaceOfPath, uid, updateConfig, useStore, type AgentStatus, type Term } from "../store";
+import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { agentById, type Agent } from "./agents";
+import { ask } from "@tauri-apps/plugin-dialog";
+import { emptyTree, fold, normalize, type TreeState } from "./agentEvents";
 
 // Lazy accessor: store.ts and this module import each other.
 const get = () => useStore.getState();
@@ -83,6 +87,9 @@ function xterm(key: string): XT {
     const id = live();
     if (id) api.ptyWrite(id, d).catch(() => {});
   });
+  term.onBell(() => {
+    if (get().terms[key]?.agent) notifyAgent(key, "Needs your input");
+  });
   term.onResize(({ cols, rows }) => {
     lastIn.set(key, Date.now()); // an agent's redraw after a resize is not "work"
     const id = live();
@@ -150,7 +157,13 @@ export async function startSession(key: string) {
   const x = xterm(key);
   if (t.sessionId) x.term.write("\r\n\x1b[2m── restarted ──\x1b[0m\r\n");
   const sessionId = uid();
-  setTerm(key, { sessionId, status: "running", startedAt: Date.now(), endedAt: undefined, exitCode: undefined, stopped: false });
+  const now = Date.now();
+  setTerm(key, { sessionId, status: "running", startedAt: now, endedAt: undefined, exitCode: undefined, stopped: false });
+  const scriptId = t.scriptId;
+  if (scriptId)
+    updateConfig((c) => {
+      if (c.scripts[scriptId]) c.scripts[scriptId].lastRunAt = now;
+    });
   let unacked = 0;
   const channel = new Channel<PtyMessage>((msg) => {
     if (msg instanceof ArrayBuffer) {
@@ -166,7 +179,8 @@ export async function startSession(key: string) {
     } else onExit(key, sessionId, msg.exit);
   });
   try {
-    await api.ptySpawn({ id: sessionId, cwd: t.cwd, command: t.command ?? null, cols: x.term.cols, rows: x.term.rows, onData: channel });
+    const { command, env } = await withAgentHooks(t);
+    await api.ptySpawn({ id: sessionId, cwd: t.cwd, command, cols: x.term.cols, rows: x.term.rows, env, onData: channel });
   } catch (e) {
     x.term.write(`\r\n\x1b[31mFailed to start: ${e}\x1b[0m\r\n`);
     setTerm(key, { status: "exited", exitCode: -1, endedAt: Date.now() });
@@ -179,6 +193,7 @@ function onExit(key: string, sessionId: string, code: number) {
   const t = get().terms[key];
   if (!t || t.sessionId !== sessionId) return; // stale message from an earlier run
   if (!t.scriptId && !t.command) return removeTerm(key, true); // plain shell exited (`exit`, Ctrl-D): close it like any terminal app
+  if (t.agent && t.status !== "stopping") notifyAgent(key, code === 0 ? "Exited" : `Exited with code ${code}`);
   const stopped = t.status === "stopping";
   xts.get(key)?.term.write(`\r\n\x1b[2m[${stopped ? "stopped" : `process exited with code ${code}`}]\x1b[0m\r\n`);
   setTerm(key, { status: "exited", exitCode: code, endedAt: Date.now(), stopped });
@@ -209,6 +224,7 @@ export async function restart(key: string) {
 /** Kills (if needed) and forgets a terminal. `closeTab` true also closes its tab. */
 export function removeTerm(key: string, closeTab = false) {
   stop(key);
+  forgetHooks(key);
   const x = xts.get(key);
   x?.term.dispose();
   x?.el.remove();
@@ -314,12 +330,150 @@ setInterval(() => {
   };
   for (const t of Object.values(terms)) {
     if (!t.agent || t.status !== "running") continue;
+    if (hooked.has(t.key)) {
+      pollHooks(t.key); // exact status + subagents from Claude hooks
+      if (hookActive.has(t.key)) continue;
+    }
     const out = lastOut.get(t.key) ?? 0;
     const inp = lastIn.get(t.key);
     const state = inp !== undefined && now - out < 1500 && out - inp > 500 ? "working" : "idle";
     const prev = agentStatus[t.key];
-    if (prev?.state !== state) put(t.key, { state, since: now, everWorked: !!prev?.everWorked || state === "working" });
+    if (prev?.state !== state) {
+      const finished = prev?.state === "working" && state === "idle";
+      put(t.key, { state, since: now, everWorked: !!prev?.everWorked || state === "working", unseen: finished ? !watching(t.key) : state === "working" ? false : prev?.unseen });
+      if (finished && now - prev.since >= 4000) notifyAgent(t.key, "Finished – waiting for you");
+    }
   }
   for (const k of Object.keys(agentStatus)) if (!terms[k]) put(k, undefined);
   if (next) useStore.setState({ agentStatus: next });
 }, 1000);
+
+/** The user is looking at this terminal right now. */
+const watching = (key: string) => document.hasFocus() && get().config.layout.activeTab === `term:${key}`;
+
+// ---------- agent notifications ----------
+
+let permission: Promise<boolean> | null = null;
+const lastNotified = new Map<string, number>();
+
+/**
+ * macOS notification for an agent terminal, unless the user is already looking at it.
+ * Finish, bell and exit often fire together, so one per terminal per 5s (10s for the bell burst).
+ */
+async function notifyAgent(key: string, what: string) {
+  const { terms, config } = get();
+  const t = terms[key];
+  if (!t?.agent || !config.settings.notifyAgents) return;
+  if (document.hasFocus() && config.layout.activeTab === `term:${key}`) return;
+  const now = Date.now();
+  if (now - (lastNotified.get(key) ?? 0) < (what === "Needs your input" ? 10_000 : 5_000)) return;
+  lastNotified.set(key, now);
+  permission ??= isPermissionGranted()
+    .then((ok) => ok || requestPermission().then((p) => p === "granted"))
+    .catch(() => false);
+  if (!(await permission)) return;
+  const name = t.renamed ? t.name : (agentById(t.agent)?.label ?? "Agent");
+  const space = spaceOfPath(t.cwd);
+  sendNotification({ title: name, body: space ? `${what} · ${space.name}` : what });
+}
+
+// ---------- Claude Code hooks: exact status + nested subagents ----------
+// Sessions launched here run `claude --settings <ide hooks file>` (merges with the user's settings)
+// with IDE_AGENT_EVENTS pointing at a per-terminal dir; the hooks drop one JSON file per event there.
+
+const hooked = new Set<string>(); // terminals launched with our hooks
+const hookActive = new Set<string>(); // ...that have produced events (then the heuristic is skipped)
+const hookPolling = new Set<string>();
+const hookState = new Map<string, TreeState>();
+
+const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
+/** Per-agent observation setup at spawn (plan 004): zero-touch args/env, or the opt-in repo hook file. */
+async function withAgentHooks(t: Term): Promise<{ command: string | null; env: Record<string, string> | null }> {
+  const plain = { command: t.command ?? null, env: null };
+  const a = agentById(t.agent);
+  if (!a || !t.command || a.observe === "none") return plain;
+  try {
+    if (a.observe === "repo" && !(await ensureRepoHooks(t, a))) return plain;
+    const setup = await api.agentSetup(a.id, t.key);
+    hooked.add(t.key);
+    hookState.delete(t.key);
+    const args = setup.args.map(shq).join(" ");
+    return { command: args ? `${t.command} ${args}` : t.command, env: setup.env };
+  } catch {
+    return plain; // still runs; status falls back to the activity heuristic
+  }
+}
+
+/** Asks once per project; then makes sure the IDE's hook file is in the repo (never replacing a foreign one). */
+async function ensureRepoHooks(t: Term, a: Agent): Promise<boolean> {
+  const p = projectById(t.projectId);
+  if (!p) return false;
+  let pref = p.agentHooks?.[a.id];
+  if (!pref) {
+    const ok = await ask(
+      `Show ${a.label}'s subagents and status in the IDE for "${p.name}"?\n\n` +
+        `This creates ${a.repoFiles} in the repository. It's listed in .git/info/exclude so it's never committed, ` +
+        `and it does nothing unless ${a.label} is started from this IDE.` +
+        (a.id === "codex" ? "\n\nCodex will ask you once to trust the hook." : ""),
+      { title: `Track ${a.label}`, okLabel: "Enable", cancelLabel: "Not now" },
+    );
+    pref = ok ? "on" : "off";
+    updateConfig((c) => {
+      const x = c.projects.find((y) => y.id === p.id);
+      if (x) x.agentHooks = { ...x.agentHooks, [a.id]: pref! };
+    });
+  }
+  if (pref !== "on") return false;
+  const r = await api.agentRepoHooks(a.id, t.cwd, true);
+  if (r === "exists") notify(`${a.label}: ${a.repoFiles} already exists in this repo, so the IDE leaves it alone; status uses terminal activity.`);
+  return r === "on";
+}
+
+function forgetHooks(key: string) {
+  if (!hooked.delete(key)) return;
+  hookActive.delete(key);
+  hookState.delete(key);
+  api.agentEventsClear(key).catch(() => {});
+  useStore.setState((s) => {
+    const { [key]: _, ...subagents } = s.subagents;
+    return { subagents };
+  });
+}
+
+async function pollHooks(key: string) {
+  if (hookPolling.has(key)) return;
+  hookPolling.add(key);
+  try {
+    const events = await api.agentEvents(key);
+    if (events.length) applyHookEvents(key, events);
+  } catch {
+    /* terminal gone or dir removed */
+  } finally {
+    hookPolling.delete(key);
+  }
+}
+
+/** Folds an agent's raw hook/plugin events (via its adapter) into the subagent tree and status. */
+export function applyHookEvents(key: string, events: HookEvent[]) {
+  const agent = get().terms[key]?.agent ?? "";
+  const exact = !!agentById(agent)?.exactStatus; // else hooks only feed subagents; status stays heuristic
+  if (exact) hookActive.add(key);
+  const h = hookState.get(key) ?? emptyTree();
+  hookState.set(key, h);
+  const now = Date.now();
+  const main = fold(h, events.flatMap((e) => normalize(agent, e as HookEvent & Record<string, unknown>)), now);
+  useStore.setState((s) => ({ subagents: { ...s.subagents, [key]: [...h.nodes.values()] } }));
+  if (!main || !exact) return;
+  const prev = get().agentStatus[key];
+  if (prev?.state === main) return;
+  const finished = main === "idle" && prev?.state === "working";
+  useStore.setState((s) => ({
+    agentStatus: {
+      ...s.agentStatus,
+      [key]: { state: main, since: now, everWorked: !!prev?.everWorked || main === "working", unseen: finished ? !watching(key) : main === "working" ? false : prev?.unseen },
+    },
+  }));
+  if (main === "waiting") notifyAgent(key, "Needs your input");
+  else if (finished) notifyAgent(key, "Finished – waiting for you");
+}

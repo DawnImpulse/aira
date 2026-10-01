@@ -64,9 +64,10 @@ pub async fn pty_spawn(
     command: Option<String>,
     cols: u16,
     rows: u16,
+    env: Option<HashMap<String, String>>,
     on_data: Channel<InvokeResponseBody>,
 ) -> Result<u32, String> {
-    tauri::async_runtime::spawn_blocking(move || spawn(app, id, cwd, command, cols, rows, on_data))
+    tauri::async_runtime::spawn_blocking(move || spawn(app, id, cwd, command, cols, rows, env.unwrap_or_default(), on_data))
         .await
         .map_err(err)?
 }
@@ -78,6 +79,7 @@ fn spawn(
     command: Option<String>,
     cols: u16,
     rows: u16,
+    extra_env: HashMap<String, String>,
     on_data: Channel<InvokeResponseBody>,
 ) -> Result<u32, String> {
     let size = PtySize { rows, cols, pixel_width: 0, pixel_height: 0 };
@@ -90,6 +92,9 @@ fn spawn(
     cmd.env_clear();
     for (k, v) in env::get() {
         cmd.env(k, v);
+    }
+    for (k, v) in &extra_env {
+        cmd.env(k, v); // e.g. IDE_AGENT_EVENTS for Claude hook events
     }
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
@@ -267,7 +272,8 @@ mod tests {
         let pid = child.process_id().unwrap();
         let roots = HashSet::from([pid]);
         let start = Instant::now();
-        while tree(&roots).len() < 3 && start.elapsed() < Duration::from_secs(5) {
+        // Interactive zsh loads the user's rc files; give it time when other tests load the CPU.
+        while tree(&roots).len() < 3 && start.elapsed() < Duration::from_secs(15) {
             std::thread::sleep(Duration::from_millis(50));
         }
         assert!(tree(&roots).len() >= 3, "expected shell + 2 sleeps, got {:?}", tree(&roots));

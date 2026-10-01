@@ -1,3 +1,4 @@
+mod agent;
 mod ai;
 mod env;
 mod fs;
@@ -93,6 +94,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(pty::Ptys::default())
         .manage(fs::Watch::default())
         .menu(menu)
@@ -119,6 +121,7 @@ pub fn run() {
                 })
                 .build()?;
             mem::start(app.handle().clone());
+            agent::clear_all(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -134,6 +137,7 @@ pub fn run() {
             fs::write_file,
             fs::create_path,
             fs::copy_text,
+            fs::list_fonts,
             fs::load_config,
             fs::save_config,
             fs::which,
@@ -145,6 +149,7 @@ pub fn run() {
             git::git_unstage,
             git::git_discard,
             git::git_commit,
+            git::git_last_message,
             git::git_init,
             git::git_branches,
             git::git_switch,
@@ -157,6 +162,10 @@ pub fn run() {
             ai::ai_set_key,
             ai::ai_commit_message,
             ai::ai_list_models,
+            agent::agent_events,
+            agent::agent_events_clear,
+            agent::agent_setup,
+            agent::agent_repo_hooks,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
