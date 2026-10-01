@@ -8,7 +8,7 @@ import { RightPanel } from "./components/RightPanel";
 import { StatusBar } from "./components/StatusBar";
 import { LinkDialog, ScriptDialog } from "./components/ScriptDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
-import { NewPathDialog, SpaceDialog } from "./components/SpaceDialog";
+import { NewPathDialog, ProjectDialog, SpaceDialog } from "./components/SpaceDialog";
 
 function TitleBar() {
   const project = useStore((s) => s.config.projects.find((p) => p.id === s.config.layout.activeProjectId));
@@ -74,7 +74,7 @@ export default function App() {
       {dialog?.kind === "link" && <LinkDialog projectId={dialog.projectId} onClose={close} />}
       {dialog?.kind === "settings" && <SettingsDialog onClose={close} />}
       {dialog?.kind === "space" && <SpaceDialog projectId={dialog.projectId} spaceId={dialog.spaceId} dir={dialog.dir} onClose={close} />}
-      {dialog?.kind === "project" && <SpaceDialog projectId={dialog.projectId} editProject onClose={close} />}
+      {dialog?.kind === "project" && <ProjectDialog projectId={dialog.projectId} onClose={close} />}
       {dialog?.kind === "newPath" && <NewPathDialog dir={dialog.dir} isDir={dialog.isDir} onClose={close} />}
       {toast && (
         <div className="toast" role="alert" onClick={() => useStore.setState({ toast: null })}>

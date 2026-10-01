@@ -1,6 +1,5 @@
-import { useEffect, useReducer, type MouseEvent, type ReactNode } from "react";
-import { ThinkingOrb, type OrbState } from "thinking-orbs";
-import { useStore } from "../store";
+import { useEffect, useReducer, useState, type MouseEvent, type ReactNode } from "react";
+import { api, type ProjectIcon as ProjectIconValue } from "../ipc";
 import { agentById } from "../lib/agents";
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
@@ -72,16 +71,39 @@ export function useNow(ms = 30_000) {
   }, [ms]);
 }
 
-const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+/** Small circular loader (CSS; stills itself under prefers-reduced-motion). */
+export function Spinner({ size = 12, color, title }: { size?: number; color?: string; title?: string }) {
+  return <span className="spinner" style={{ width: size, height: size, color }} title={title} role="status" aria-label={title ?? "Loading"} />;
+}
 
-/** Thinking orb that follows the app theme and pauses for reduced-motion users. */
-export function Orb({ state, size = 20, color, title }: { state: OrbState; size?: 20 | 32 | 64; color?: string; title?: string }) {
-  const theme = useStore((s) => s.config.settings.theme);
-  return (
-    <span className="orb" title={title} style={{ width: size, height: size }}>
-      <ThinkingOrb state={state} size={size} color={color} theme={theme === "system" ? "auto" : theme} paused={reducedMotion.matches} />
-    </span>
-  );
+const imageUrls = new Map<string, Promise<string>>();
+/** Blob URL for an image inside a project (cached per path; SVG typed so <img> renders it, scripts never run). */
+function imageUrl(path: string) {
+  let url = imageUrls.get(path);
+  if (!url) {
+    url = api
+      .readFileBytes(path)
+      .then((buf) => URL.createObjectURL(new Blob([buf], { type: path.toLowerCase().endsWith(".svg") ? "image/svg+xml" : "image/png" })));
+    url.catch(() => imageUrls.delete(path));
+    imageUrls.set(path, url);
+  }
+  return url;
+}
+
+/** A project's icon: material symbol (in the project color), emoji, or an image from its folder. */
+export function ProjectIcon({ icon, color, size = 16 }: { icon?: ProjectIconValue; color?: string; size?: number }) {
+  const [src, setSrc] = useState<string>();
+  useEffect(() => {
+    if (icon?.type !== "image") return;
+    let alive = true;
+    imageUrl(icon.value).then((u) => alive && setSrc(u), () => alive && setSrc(undefined));
+    return () => void (alive = false);
+  }, [icon?.type, icon?.value]);
+  if (icon?.type === "emoji") return <span className="project-emoji" style={{ fontSize: size * 0.95, width: size, height: size }} aria-hidden="true">{icon.value}</span>;
+  if (icon?.type === "image") {
+    return src ? <img className="project-image" src={src} width={size} height={size} alt="" /> : <Icon name="image" size={size} color={color} />;
+  }
+  return <Icon name={icon?.value ?? "data_object"} size={size} color={color} />;
 }
 
 /** Coding-agent logo. Single-color logos are masks filled with the current text color. */

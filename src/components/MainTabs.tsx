@@ -5,7 +5,8 @@ import { attach, newTerminal, renameTerm, restart, runScript, startSession, stop
 import { AGENTS, availableAgents, type Agent } from "../lib/agents";
 import { fileIconUrl } from "../lib/icons";
 import { DiffView, FileView } from "./Editors";
-import { AgentIcon, cx, Icon, IconButton, Orb, stop } from "./ui";
+import { AgentIcon, cx, Icon, IconButton, Spinner, stop } from "./ui";
+import { popupMenu } from "../lib/menu";
 
 export function MainTabs() {
   const tabs = useStore((s) => s.config.layout.tabs);
@@ -33,6 +34,11 @@ export function MainTabs() {
   );
 }
 
+/** Closes every tab except `keep` (dirty files still ask first). */
+async function closeOthers(keep: string) {
+  for (const t of useStore.getState().config.layout.tabs) if (t.id !== keep) await closeTab(t.id);
+}
+
 function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
   const term = useStore((s) => (tab.kind === "terminal" ? s.terms[tab.key] : undefined));
   const working = useStore((s) => tab.kind === "terminal" && s.agentStatus[tab.key]?.state === "working" && s.terms[tab.key]?.status === "running");
@@ -41,7 +47,7 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
   const [editing, setEditing] = useState(false);
   const preview = tab.kind === "file" && !tab.pinned;
   const title =
-    tab.kind === "terminal" ? (term?.name ?? "Terminal") : tab.kind === "file" ? basename(tab.path) : `${basename(tab.path)} (${tab.staged ? "staged" : "working tree"})`;
+    tab.kind === "terminal" ? (term?.name ?? "Terminal") : tab.kind === "file" ? basename(tab.path) : `${basename(tab.path)} (${tab.head ? "changes" : tab.staged ? "staged" : "working tree"})`;
 
   return (
     <div
@@ -50,12 +56,20 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
       className={cx("tab", active && "active", preview && "preview")}
       onClick={() => activateTab(tab.id)}
       onAuxClick={(e) => e.button === 1 && closeTab(tab.id)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        popupMenu([
+          ...(term ? [{ text: "Rename…", action: () => setEditing(true) }, "-" as const] : []),
+          { text: "Close", action: () => closeTab(tab.id) },
+          { text: "Close Others", action: () => closeOthers(tab.id) },
+        ]);
+      }}
       onDoubleClick={() => (tab.kind === "terminal" ? setEditing(true) : pinTab(tab.id))}
       title={tab.kind === "terminal" ? term?.cwd : tab.path}
     >
       {tab.kind === "terminal" &&
         (term?.agent ? (
-          working ? <Orb state="working" size={20} color={agentColor} title="Working" /> : <AgentIcon agent={term.agent} size={14} />
+          working ? <Spinner size={12} color={agentColor} title="Working" /> : <AgentIcon agent={term.agent} size={14} />
         ) : (
           <Icon name="terminal" size={14} className={cx(term?.status === "running" ? "green" : isFailed(term) && "red")} />
         ))}
@@ -154,7 +168,7 @@ function Welcome() {
   const hasProjects = useStore((s) => s.config.projects.length > 0);
   return (
     <div className="welcome">
-      <Orb state="breathing" size={64} />
+      <Icon name="data_object" size={44} className="dim" />
       <h2>{hasProjects ? "Nothing open" : "Open a folder to get started"}</h2>
       <p className="dim">Pick a script on the left, a file on the right, or a change in the Git view.</p>
       <button className="btn primary" onClick={openFolders}>

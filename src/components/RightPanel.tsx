@@ -9,7 +9,7 @@ import { newTerminal } from "../lib/terminals";
 import { popupMenu, type MenuEntry } from "../lib/menu";
 import { dirIconUrl, fileIconUrl } from "../lib/icons";
 import { GitPanel } from "./GitPanel";
-import { cx, Icon, IconButton, stop } from "./ui";
+import { cx, Icon, IconButton, ProjectIcon, stop } from "./ui";
 
 export function RightPanel() {
   const view = useStore((s) => s.config.layout.rightView);
@@ -183,7 +183,7 @@ function FileTree({ project, space }: { project: Project; space: Space }) {
   return (
     <div className="tree" onContextMenu={(ev) => rowMenu(ev, { name: basename(root), path: root, dir: true })}>
       <div className="sub-head">
-        <Icon name={space.icon ?? "folder"} size={13} color={space.color} />
+        <ProjectIcon icon={project.icon} color={project.color} size={13} />
         <span className="ellipsis" title={root}>{space.name}</span>
         <span className="hover-actions always">
           <IconButton

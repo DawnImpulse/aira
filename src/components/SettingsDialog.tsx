@@ -5,8 +5,11 @@ import { AI_PROVIDERS, aiCfg, aiProvider } from "../lib/aiProviders";
 import { hasBinary } from "../lib/agents";
 import { cx, Icon, Modal } from "./ui";
 
-const UI_FONTS = ["System", "Inter", "Helvetica Neue", "Avenir Next", "IBM Plex Sans", "Geist"];
-const MONO_FONTS = ["SF Mono", "Menlo", "Monaco", "JetBrains Mono", "Fira Code", "Cascadia Code", "IBM Plex Mono", "Source Code Pro", "Geist Mono"];
+// Fallbacks if the installed-font lookup fails (non-macOS or CoreText error).
+const UI_FONTS = ["Inter", "Helvetica Neue", "Helvetica", "Avenir Next", "IBM Plex Sans", "Geist", "Roboto", "Open Sans", "Lato", "Source Sans 3", "Nunito", "Manrope", "DM Sans"];
+const MONO_FONTS = ["SF Mono", "Menlo", "Monaco", "Courier New", "JetBrains Mono", "Fira Code", "Cascadia Code", "IBM Plex Mono", "Source Code Pro", "Geist Mono", "Hack", "Iosevka", "Victor Mono", "Roboto Mono", "Ubuntu Mono", "Inconsolata"];
+
+let installedFonts: Promise<{ all: string[]; mono: string[] }> | null = null;
 
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const s = useStore((st) => st.config.settings);
@@ -17,6 +20,11 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [cliFound, setCliFound] = useState<boolean | null>(null);
   const p = aiProvider(s.ai.provider);
   const saved = !!s.ai.keySaved[p.id];
+  const [fonts, setFonts] = useState({ all: UI_FONTS, mono: MONO_FONTS });
+  useEffect(() => {
+    installedFonts ??= api.listFonts().catch(() => ({ all: [], mono: [] }));
+    installedFonts.then((f) => f.all.length && setFonts(f));
+  }, []);
 
   useEffect(() => {
     setModels([]);
@@ -62,22 +70,29 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
         <label className="field">
           <span>Interface font</span>
-          <input list="ui-fonts" value={s.uiFont} onChange={(e) => upd((x) => void (x.uiFont = e.target.value))} />
-          <datalist id="ui-fonts">{UI_FONTS.map((f) => <option key={f} value={f} />)}</datalist>
+          <input list="ui-fonts" value={s.uiFont} onChange={(e) => upd((x) => void (x.uiFont = e.target.value))} placeholder="System" title="Type to search installed fonts" />
+          <datalist id="ui-fonts">{["System", ...fonts.all].map((f) => <option key={f} value={f} />)}</datalist>
         </label>
 
         <div className="row gap">
           <label className="field grow">
             <span>Editor & terminal font</span>
-            <input list="mono-fonts" value={s.monoFont} onChange={(e) => upd((x) => void (x.monoFont = e.target.value))} />
-            <datalist id="mono-fonts">{MONO_FONTS.map((f) => <option key={f} value={f} />)}</datalist>
+            <input list="mono-fonts" value={s.monoFont} onChange={(e) => upd((x) => void (x.monoFont = e.target.value))} title="Type to search installed monospace fonts" />
+            <datalist id="mono-fonts">{fonts.mono.map((f) => <option key={f} value={f} />)}</datalist>
           </label>
           <label className="field">
             <span>Size</span>
             <input type="number" min={9} max={28} value={s.fontSize} onChange={(e) => upd((x) => void (x.fontSize = Math.min(28, Math.max(9, Number(e.target.value) || 13))))} />
           </label>
         </div>
-        <small className="dim">Fonts must be installed on this Mac. Unknown names fall back to SF Mono / system.</small>
+        <small className="dim">
+          {fonts.all.length} installed fonts ({fonts.mono.length} monospace) — type to search. Unknown names fall back to SF Mono / system.
+        </small>
+
+        <label className="check">
+          <input type="checkbox" checked={s.notifyAgents} onChange={(e) => upd((x) => void (x.notifyAgents = e.target.checked))} />
+          <span>Notify me when a coding agent finishes, needs input, or exits (only when I'm not looking at it).</span>
+        </label>
 
         <label className="check">
           <input type="checkbox" checked={s.terminalWebgl} onChange={(e) => upd((x) => void (x.terminalWebgl = e.target.checked))} />
@@ -133,7 +148,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         {(p.needsKey || p.optionalKey) && (
           <label className="field">
             <span>
-              API key{p.optionalKey ? " (optional)" : ""} {saved && <em className="green">· saved in macOS Keychain</em>}
+              API key{p.optionalKey ? " (optional)" : ""} {saved && <em className="green">· saved</em>}
             </span>
             <div className="row gap">
               <input
@@ -147,6 +162,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <button type="button" className="btn primary" disabled={!key.trim()} onClick={() => saveKey(key)}>Save</button>
               {saved && <button type="button" className="btn" onClick={() => saveKey("")}>Remove</button>}
             </div>
+            <small className="dim">
+              <Icon name="lock" size={12} /> Stored only in your macOS Keychain (service “com.codevry.ide”); never written to the IDE's config or logs.
+            </small>
           </label>
         )}
 

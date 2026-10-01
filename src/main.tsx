@@ -5,6 +5,7 @@ import "material-symbols/outlined.css";
 import "./styles.css";
 import App from "./App";
 import { boot, notify } from "./store";
+import { installTooltips } from "./lib/tooltips";
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 
@@ -26,6 +27,7 @@ if (!isTauri()) {
     if (window.getSelection()?.toString()) return;
     e.preventDefault();
   });
+  installTooltips();
   boot().catch((e) => notify(`Startup failed: ${e}`));
   root.render(
     <React.StrictMode>

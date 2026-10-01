@@ -83,6 +83,45 @@ pub async fn copy_text(text: String) -> Result<(), String> {
     child.wait().await.map_err(err).map(drop)
 }
 
+// ---------- fonts ----------
+
+#[derive(Serialize, Default)]
+pub struct Fonts {
+    all: Vec<String>,
+    mono: Vec<String>,
+}
+
+/// Installed font families (and the monospace subset) for the font pickers.
+#[tauri::command]
+pub async fn list_fonts() -> Fonts {
+    tauri::async_runtime::spawn_blocking(system_fonts).await.unwrap_or_default()
+}
+
+/// Uses only CoreText calls that can't panic: release builds use panic=abort, and
+/// CTFontDescriptor::traits() asserts on fonts without a traits dictionary.
+#[cfg(target_os = "macos")]
+fn system_fonts() -> Fonts {
+    use core_text::font_descriptor::SymbolicTraitAccessors;
+    let mut all: Vec<String> = core_text::font_collection::get_family_names()
+        .iter()
+        .map(|s| s.to_string())
+        .filter(|n| !n.starts_with('.')) // hidden system UI faces
+        .collect();
+    all.sort_by_key(|s| s.to_lowercase());
+    all.dedup();
+    let mono = all
+        .iter()
+        .filter(|f| core_text::font::new_from_name(f, 12.0).is_ok_and(|font| font.symbolic_traits().is_monospace()))
+        .cloned()
+        .collect();
+    Fonts { all, mono }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn system_fonts() -> Fonts {
+    Fonts::default() // ponytail: the frontend falls back to a curated list
+}
+
 // ---------- config ----------
 
 fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -208,6 +247,16 @@ mod tests {
         create_path(d.clone(), true).await.unwrap();
         assert!(std::path::Path::new(&d).is_dir());
         assert!(create_path(d, true).await.is_err());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn lists_installed_fonts() {
+        let f = system_fonts();
+        assert!(f.all.len() > 20, "{} families", f.all.len());
+        assert!(f.all.iter().any(|n| n == "Helvetica"));
+        assert!(f.mono.iter().any(|n| n == "Menlo"), "mono: {:?}", f.mono);
+        assert!(!f.mono.iter().any(|n| n == "Helvetica"));
     }
 
     #[test]
