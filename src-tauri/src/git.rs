@@ -214,6 +214,7 @@ pub async fn git_file_versions(
     path: String,
     orig: Option<String>,
     staged: bool,
+    head: Option<bool>,
 ) -> Result<FileVersions, String> {
     let head_path = format!("HEAD:{}", orig.as_deref().unwrap_or(&path));
     let index_path = format!(":{path}");
@@ -221,7 +222,10 @@ pub async fn git_file_versions(
         let repo = repo.clone();
         async move { run_raw(&repo, &["show", &spec]).await.unwrap_or_default() }
     };
-    let (original, modified) = if staged {
+    let (original, modified) = if head == Some(true) {
+        // Commit-panel view: HEAD ↔ working tree (the staging area isn't shown).
+        (show(head_path).await, tokio::fs::read(Path::new(&repo).join(&path)).await.unwrap_or_default())
+    } else if staged {
         (show(head_path).await, show(index_path).await)
     } else {
         let mut original = run_raw(&repo, &["show", &index_path]).await.unwrap_or_default();
@@ -267,11 +271,17 @@ pub async fn git_unstage(repo: String, paths: Vec<String>) -> Result<(), String>
 }
 
 #[tauri::command]
+/// Rollback: tracked files go back to HEAD (index and working tree); untracked ones are removed.
 pub async fn git_discard(repo: String, tracked: Vec<String>, untracked: Vec<String>) -> Result<(), String> {
     if !tracked.is_empty() {
-        let mut args = vec!["restore", "--worktree", "--"];
+        let mut args = vec!["restore", "--source=HEAD", "--staged", "--worktree", "--"];
         args.extend(tracked.iter().map(String::as_str));
-        run(&repo, &args).await?;
+        if run(&repo, &args).await.is_err() {
+            // Unborn branch (no HEAD yet): restore the working tree from the index.
+            let mut args = vec!["restore", "--worktree", "--"];
+            args.extend(tracked.iter().map(String::as_str));
+            run(&repo, &args).await?;
+        }
     }
     if !untracked.is_empty() {
         let mut args = vec!["clean", "-fd", "--"];
@@ -281,9 +291,31 @@ pub async fn git_discard(repo: String, tracked: Vec<String>, untracked: Vec<Stri
     Ok(())
 }
 
+/// Commits exactly `paths` (pathspec ⇒ `--only`: other staged changes stay staged). Untracked files
+/// are added first. With `amend` and no paths, only the last commit's message changes.
 #[tauri::command]
-pub async fn git_commit(repo: String, message: String) -> Result<(), String> {
-    run(&repo, &["commit", "-m", &message]).await.map(drop)
+pub async fn git_commit(repo: String, message: String, paths: Vec<String>, untracked: Vec<String>, amend: bool) -> Result<(), String> {
+    if !untracked.is_empty() {
+        let mut args = vec!["add", "--"];
+        args.extend(untracked.iter().map(String::as_str));
+        run(&repo, &args).await?;
+    }
+    let mut args = vec!["commit"];
+    if amend {
+        args.push("--amend");
+    }
+    args.extend(["-m", &message]);
+    if !paths.is_empty() {
+        args.push("--");
+        args.extend(paths.iter().map(String::as_str));
+    }
+    run(&repo, &args).await.map(drop)
+}
+
+/// Full message of the last commit (pre-fills "Amend").
+#[tauri::command]
+pub async fn git_last_message(repo: String) -> Result<String, String> {
+    run(&repo, &["log", "-1", "--pretty=%B"]).await.map(|s| s.trim_end().to_string())
 }
 
 #[tauri::command]
@@ -470,8 +502,8 @@ mod tests {
         let st = git_status(r.clone(), vec!["inner".into()]).await.unwrap();
         assert!(st.files.iter().any(|f| f.path == "new.txt" && f.x == '?'));
 
-        git_commit(r.clone(), "feat: test".into()).await.unwrap();
-        let v = git_file_versions(r.clone(), "a.txt".into(), None, false).await.unwrap();
+        git_commit(r.clone(), "feat: test".into(), vec![], vec![], false).await.unwrap();
+        let v = git_file_versions(r.clone(), "a.txt".into(), None, false, None).await.unwrap();
         assert_eq!((v.original.as_str(), v.modified.as_str()), ("a\nb\n", "a\nb\n"));
 
         let wt = format!("{r}-feat");
@@ -483,6 +515,27 @@ mod tests {
         assert!(b.local.iter().any(|x| x.name == "main" && x.current));
         git_worktree_remove(r.clone(), wt.clone(), true).await.unwrap();
         assert!(!Path::new(&wt).exists());
+
+        // Commit panel: commit only the checked paths; an unrelated staged file stays staged.
+        sh(&root, "echo x > other.txt && git add other.txt && git -c user.email=t@t -c user.name=t commit -qm other && echo y >> other.txt");
+        sh(&root, "echo c >> a.txt && echo s > staged.txt && git add staged.txt && echo u > untracked.txt");
+        git_commit(r.clone(), "fix: pick".into(), vec!["a.txt".into(), "untracked.txt".into()], vec!["untracked.txt".into()], false).await.unwrap();
+        let last = run(&r, &["show", "--name-only", "--pretty=", "HEAD"]).await.unwrap();
+        assert_eq!(last.lines().collect::<Vec<_>>(), vec!["a.txt", "untracked.txt"], "only checked paths");
+        let st = git_status(r.clone(), vec!["inner".into()]).await.unwrap();
+        assert!(st.files.iter().any(|f| f.path == "staged.txt" && f.x == 'A'), "unrelated staged file untouched");
+        assert!(st.files.iter().any(|f| f.path == "other.txt" && f.y == 'M'), "unchecked change untouched");
+        // HEAD ↔ working-tree diff
+        let v = git_file_versions(r.clone(), "other.txt".into(), None, false, Some(true)).await.unwrap();
+        assert_eq!((v.original.as_str(), v.modified.as_str()), ("x\n", "x\ny\n"));
+        // Amend: message only
+        git_commit(r.clone(), "fix: picked files".into(), vec![], vec![], true).await.unwrap();
+        assert_eq!(git_last_message(r.clone()).await.unwrap(), "fix: picked files");
+        // Rollback to HEAD (index + worktree) and remove untracked
+        sh(&root, "echo z > new.txt");
+        git_discard(r.clone(), vec!["other.txt".into(), "staged.txt".into()], vec!["new.txt".into()]).await.unwrap();
+        let st = git_status(r.clone(), vec!["inner".into()]).await.unwrap();
+        assert!(!st.files.iter().any(|f| ["other.txt", "staged.txt", "new.txt"].contains(&f.path.as_str())), "{:?}", st.files);
     }
 
     #[test]

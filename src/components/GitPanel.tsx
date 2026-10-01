@@ -1,29 +1,73 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { api, type Branches, type FileEntry, type Project, type Repo } from "../ipc";
 import {
-  addSpace, basename, discover, dirname, excludesFor, gitReposOf, isUnder, notify, openDiff, openFile, refreshStatus, setActiveSpace,
-  statusLetter, updateConfig, useStore,
+  addSpace, basename, discover, dirname, excludesFor, gitReposOf, isUnder, notify, openDiff, openFile, refreshStatus, selectActiveSpace,
+  setActiveSpace, updateConfig, useStore,
 } from "../store";
 import { newTerminal } from "../lib/terminals";
 import { fileIconUrl } from "../lib/icons";
 import { aiCfg, aiProvider } from "../lib/aiProviders";
-import { cx, Icon, IconButton, Orb, stop } from "./ui";
+import { cx, Icon, IconButton, Spinner, stop } from "./ui";
 
 const PALETTE = ["#6aa8ff", "#3fcf6e", "#e6b450", "#c084fc", "#22d3ee", "#fb923c", "#f472b6", "#a3e635"];
 
-/** WebStorm-style: every repo in the project, each its own colored section with its own commit box. */
+/** One commit = one repository; checking a file elsewhere moves the selection there. */
+type Selection = { repo: string | null; paths: Set<string> };
+
+const fileClass = (f: FileEntry) =>
+  f.conflict ? "fs-conflict" : f.x === "?" ? "fs-new" : f.x === "D" || f.y === "D" ? "fs-deleted" : f.x === "A" ? "fs-added" : "fs-modified";
+const fileLetter = (f: FileEntry) => (f.conflict ? "!" : f.x === "?" ? "U" : f.y !== "." ? f.y : f.x);
+
+/** WebStorm-style Commit panel: one tree of changes across the project's repos, one commit area. */
 export function GitPanel({ project }: { project: Project }) {
   const all = useStore((s) => s.repos[project.id]);
+  const status = useStore((s) => s.status);
+  const ai = useStore((s) => s.config.settings.ai);
+  const activeSpace = useStore(selectActiveSpace);
+  const [sel, setSel] = useState<Selection>({ repo: null, paths: new Set() });
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const [rootOpen, setRootOpen] = useState(true);
+  const [showClean, setShowClean] = useState(false);
+  const [showWorktrees, setShowWorktrees] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [msg, setMsg] = useState("");
+  const [amend, setAmend] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [focused, setFocused] = useState<{ repo: string; file: FileEntry } | null>(null);
+
+  const repos = useMemo(
+    () => gitReposOf(project, all).sort((a, b) => Number(b.path === project.path) - Number(a.path === project.path) || a.path.localeCompare(b.path)),
+    [project, all],
+  );
+  const colorOf = (r: Repo) => (r.path === project.path ? (project.color ?? PALETTE[0]) : PALETTE[repos.indexOf(r) % PALETTE.length]);
+  const labelOf = (r: Repo) =>
+    project.spaces.find((s) => s.dir === r.path)?.name ??
+    (r.path === project.path ? project.name : isUnder(r.path, project.path) ? r.path.slice(project.path.length + 1) : basename(r.path));
+  const filesOf = (r: string) => status[r]?.files ?? [];
+  const changed = repos.filter((r) => filesOf(r.path).length > 0);
+  const clean = repos.filter((r) => !changed.includes(r));
+  const total = changed.reduce((n, r) => n + filesOf(r.path).length, 0);
+
+  // Default selection: everything in the active space's repo (or the first changed repo).
+  useEffect(() => {
+    if (sel.repo && changed.some((r) => r.path === sel.repo)) return;
+    const pick = changed.find((r) => activeSpace && isUnder(activeSpace.dir, r.path)) ?? changed[0];
+    if (pick) {
+      setSel({ repo: pick.path, paths: new Set(filesOf(pick.path).map((f) => f.path)) });
+      setOpen((o) => new Set(o).add(pick.path));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [changed.map((r) => r.path).join("|")]);
+
   if (!all) {
     return (
       <div className="empty-hint">
-        <Orb state="searching" size={32} />
+        <Spinner size={18} />
         <p>Scanning for repositories…</p>
       </div>
     );
   }
-  const repos = gitReposOf(project, all).sort((a, b) => Number(b.path === project.path) - Number(a.path === project.path) || a.path.localeCompare(b.path));
   if (!repos.length) {
     return (
       <div className="empty-hint">
@@ -34,63 +78,84 @@ export function GitPanel({ project }: { project: Project }) {
       </div>
     );
   }
-  return (
-    <div className="git scroll">
-      {repos.map((r, i) => {
-        const space = project.spaces.find((s) => s.dir === r.path);
-        return (
-          <RepoSection
-            key={r.path}
-            project={project}
-            repo={r}
-            all={all}
-            color={space?.color ?? PALETTE[i % PALETTE.length]}
-            label={space?.name ?? (r.path === project.path ? project.name : isUnder(r.path, project.path) ? r.path.slice(project.path.length + 1) : basename(r.path))}
-            single={repos.length === 1}
-          />
-        );
-      })}
-    </div>
-  );
-}
 
-function RepoSection({ project, repo, all, color, label, single }: { project: Project; repo: Repo; all: Repo[]; color: string; label: string; single: boolean }) {
-  const st = useStore((s) => s.status[repo.path]);
-  const ai = useStore((s) => s.config.settings.ai);
-  const [open, setOpen] = useState<boolean | null>(null);
-  const [msg, setMsg] = useState("");
-  const [busy, setBusy] = useState<string | null>(null);
+  const selRepo = repos.find((r) => r.path === sel.repo);
+  // Only paths that still exist count (a commit or refresh may have removed some).
+  const checked = selRepo ? filesOf(selRepo.path).filter((f) => sel.paths.has(f.path)) : [];
+  const moveTo = (repo: string, paths: string[]) => {
+    if (sel.repo && sel.repo !== repo && checked.length) {
+      const r = repos.find((x) => x.path === repo);
+      setNote(`Commits are per repository — selection moved to ${r ? labelOf(r) : basename(repo)}.`);
+    } else setNote(null);
+    setSel({ repo, paths: new Set(paths) });
+  };
+  const toggleFile = (repo: string, path: string) => {
+    if (sel.repo !== repo) return moveTo(repo, [path]);
+    const next = new Set(sel.paths);
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    setSel({ repo, paths: next });
+  };
+  const toggleRepo = (repo: string) => {
+    const files = filesOf(repo).map((f) => f.path);
+    const allOn = sel.repo === repo && files.every((p) => sel.paths.has(p));
+    if (allOn) setSel({ repo, paths: new Set() });
+    else moveTo(repo, files);
+  };
+  const toggleOpen = (repo: string) =>
+    setOpen((o) => {
+      const n = new Set(o);
+      if (n.has(repo)) n.delete(repo);
+      else n.add(repo);
+      return n;
+    });
 
-  const run = async (what: string, fn: () => Promise<unknown>) => {
+  const run = async (what: string, fn: () => Promise<unknown>, refresh: string[] = sel.repo ? [sel.repo] : []) => {
     setBusy(what);
     try {
       await fn();
+      return true;
     } catch (e) {
       notify(e);
+      return false;
     } finally {
       setBusy(null);
-      refreshStatus(repo.path);
+      refresh.forEach(refreshStatus);
     }
   };
 
-  const files = st?.files ?? [];
-  // Expanded by default once status is known and has changes (or when it's the only repo).
-  const isOpen = open ?? (single || files.length > 0);
-  const staged = files.filter((f) => !f.conflict && f.x !== "." && f.x !== "?");
-  const unstaged = files.filter((f) => !f.conflict && (f.y !== "." || f.x === "?"));
-  const conflicts = files.filter((f) => f.conflict);
-  const excludes = excludesFor(repo.path);
-  const provider = aiProvider(ai.provider);
-
-  const commit = () =>
-    run("commit", async () => {
-      if (!msg.trim()) throw new Error("Write a commit message first.");
-      if (!staged.length) await api.stage(repo.path, [], excludes); // nothing staged: commit everything
-      await api.commit(repo.path, msg.trim());
-      setMsg("");
+  const commit = async (push: boolean) => {
+    if (!selRepo) return;
+    const repo = selRepo.path;
+    if (!msg.trim()) return notify("Write a commit message first.");
+    if (!checked.length && !amend) return notify("Check the files to commit.");
+    const merging = filesOf(repo).some((f) => f.conflict);
+    const paths = checked.flatMap((f) => (f.orig ? [f.path, f.orig] : [f.path]));
+    const untracked = checked.filter((f) => f.x === "?").map((f) => f.path);
+    const ok = await run(push ? "commit-push" : "commit", async () => {
+      if (merging) {
+        // Git refuses partial commits during a merge: stage the checked files, commit the index.
+        await api.stage(repo, paths, []);
+        await api.commit(repo, msg.trim(), [], [], amend);
+      } else await api.commit(repo, msg.trim(), paths, untracked, amend);
+      if (push) await api.push(repo);
     });
+    if (ok) {
+      setMsg("");
+      setAmend(false);
+      setSel({ repo: null, paths: new Set() }); // re-defaults to what's left
+    }
+  };
+
+  const toggleAmend = async (on: boolean) => {
+    setAmend(on);
+    const repo = sel.repo ?? changed[0]?.path ?? repos[0]?.path;
+    if (on && !msg.trim() && repo) setMsg(await api.lastMessage(repo).catch(() => ""));
+  };
+
+  const provider = aiProvider(ai.provider);
   const generate = async () => {
-    // Providers that may train on / store the diff abroad need a one-time, informed OK.
+    if (!selRepo) return;
     if (provider.risk !== "ok" && !ai.acknowledged[provider.id]) {
       const ok = await ask(`${provider.note}\n\nSend this repository's diff to ${provider.label}?`, {
         title: `Generate with ${provider.label}`,
@@ -100,140 +165,180 @@ function RepoSection({ project, repo, all, color, label, single }: { project: Pr
       if (!ok) return;
       updateConfig((c) => void (c.settings.ai.acknowledged = { ...c.settings.ai.acknowledged, [provider.id]: true }));
     }
-    run("ai", async () => setMsg(await api.aiCommitMessage(repo.path, excludes, aiCfg(ai))));
+    const paths = checked.flatMap((f) => (f.orig ? [f.path, f.orig] : [f.path]));
+    run("ai", async () => setMsg(await api.aiCommitMessage(selRepo.path, excludesFor(selRepo.path), aiCfg(ai), paths)), []);
   };
-  const discard = async (list: FileEntry[]) => {
-    const what = list.length === 1 ? basename(list[0].path) : `${list.length} files`;
-    if (!(await ask(`Discard changes to ${what}? This cannot be undone.`, { title: "Discard changes", kind: "warning", okLabel: "Discard" }))) return;
-    run("discard", () =>
-      api.discard(
-        repo.path,
-        list.filter((f) => f.x !== "?").map((f) => f.path),
-        list.filter((f) => f.x === "?").map((f) => f.path),
-      ),
-    );
+
+  const rollback = async () => {
+    if (!selRepo || !checked.length) return notify("Check the files to roll back.");
+    const what = checked.length === 1 ? basename(checked[0].path) : `${checked.length} files`;
+    if (!(await ask(`Roll back ${what} in ${labelOf(selRepo)} to the last commit? This cannot be undone.`, { title: "Rollback", kind: "warning", okLabel: "Rollback" })))
+      return;
+    run("rollback", () => api.discard(selRepo.path, checked.filter((f) => f.x !== "?").map((f) => f.path), checked.filter((f) => f.x === "?").map((f) => f.path)));
   };
-  const syncIcon = (what: string, icon: string) => (busy === what ? <Orb state="connecting" size={20} /> : <Icon name={icon} size={14} />);
+
+  const fetchAll = () => run("fetch", async () => { for (const r of repos) await api.fetch(r.path); }, repos.map((r) => r.path));
+  const shown = showClean ? [...changed, ...clean] : changed;
+  const label = selRepo ? labelOf(selRepo) : "";
+  const commitLabel = amend && !checked.length ? `Amend ${label}` : `Commit${checked.length ? ` ${checked.length} file${checked.length > 1 ? "s" : ""}` : ""}${label ? ` to ${label}` : ""}`;
 
   return (
-    <section className="repo-section" style={{ "--repo-color": color } as CSSProperties}>
-      <div className="repo-head" onClick={() => setOpen(!isOpen)} role="button" aria-expanded={isOpen}>
-        <Icon name={isOpen ? "expand_more" : "chevron_right"} size={14} className="dim" />
-        <span className="repo-dot" />
-        <span className="repo-name ellipsis" title={repo.path}>{label}</span>
-        {files.length > 0 && <span className="count">{files.length}</span>}
-      </div>
-      <div className="repo-sync row">
-        <BranchMenu repo={repo.path} current={st?.branch ?? null} onDone={() => refreshStatus(repo.path)} />
+    <div className="git commit-panel">
+      <div className="git-toolbar">
+        <IconButton icon="refresh" title="Refresh" onClick={() => repos.forEach((r) => refreshStatus(r.path))} />
+        <IconButton icon="undo" title="Rollback checked files to HEAD" onClick={rollback} disabled={!checked.length || !!busy} />
+        <IconButton icon="difference" title="Show diff of the focused file" onClick={() => focused && openDiff(focused.repo, focused.file, false, true)} disabled={!focused} />
+        <IconButton icon="sync" title="Fetch all repositories" className={cx(busy === "fetch" && "spin")} onClick={fetchAll} disabled={!!busy} />
         <span className="spacer" />
-        <button className="btn small" title="Fetch" disabled={!!busy} onClick={() => run("fetch", () => api.fetch(repo.path))}>
-          {syncIcon("fetch", "sync")}
-        </button>
-        <button className="btn small" title="Pull" disabled={!!busy} onClick={() => run("pull", () => api.pull(repo.path))}>
-          {syncIcon("pull", "download")} {st?.behind || ""}
-        </button>
-        <button className="btn small" title={st?.upstream ? `Push to ${st.upstream}` : "Push (sets upstream)"} disabled={!!busy} onClick={() => run("push", () => api.push(repo.path))}>
-          {syncIcon("push", "upload")} {st?.ahead || ""}
-        </button>
+        <IconButton icon="unfold_more" title="Expand all" onClick={() => setOpen(new Set(shown.map((r) => r.path)))} />
+        <IconButton icon="unfold_less" title="Collapse all" onClick={() => setOpen(new Set())} />
       </div>
 
-      {isOpen && (
-        <div className="repo-body">
-          <div className="commit-box">
-            <textarea
-              value={msg}
-              onChange={(e) => setMsg(e.target.value)}
-              placeholder={`Message for ${label} (⌘⏎ to commit${staged.length ? "" : " all"})`}
-              rows={3}
-              onKeyDown={(e) => e.key === "Enter" && e.metaKey && commit()}
-            />
-            <div className="row">
-              <button className="btn" title={`Generate with ${provider.label}`} disabled={!!busy || !files.length} onClick={generate}>
-                {busy === "ai" ? <Orb state="composing" size={20} /> : <Icon name="auto_awesome" size={14} />} Generate
-              </button>
-              <span className="spacer" />
-              <button className="btn primary" disabled={!!busy || !files.length || !msg.trim()} onClick={commit}>
-                <Icon name="check" size={14} /> {staged.length ? "Commit" : "Commit all"}
-              </button>
-            </div>
-          </div>
-          {conflicts.length > 0 && (
-            <FileSection title="Merge conflicts" files={conflicts} repo={repo.path} staged={false}>
-              <IconButton icon="add" title="Mark all resolved (stage)" onClick={() => run("stage", () => api.stage(repo.path, conflicts.map((f) => f.path), []))} />
-            </FileSection>
-          )}
-          {staged.length > 0 && (
-            <FileSection title="Staged" files={staged} repo={repo.path} staged onUnstage={(f) => run("unstage", () => api.unstage(repo.path, [f.path]))}>
-              <IconButton icon="remove" title="Unstage all" onClick={() => run("unstage", () => api.unstage(repo.path, []))} />
-            </FileSection>
-          )}
-          <FileSection
-            title="Changes"
-            files={unstaged}
-            repo={repo.path}
-            staged={false}
-            onStage={(f) => run("stage", () => api.stage(repo.path, [f.path], []))}
-            onDiscard={(f) => discard([f])}
-          >
-            {unstaged.length > 0 && (
-              <>
-                <IconButton icon="undo" title="Discard all" onClick={() => discard(unstaged)} />
-                <IconButton icon="add" title="Stage all" onClick={() => run("stage", () => api.stage(repo.path, [], excludes))} />
-              </>
-            )}
-          </FileSection>
-          {!files.length && st && <p className="empty-note">No changes.</p>}
-          {repo.kind !== "worktree" && <Worktrees project={project} repo={repo} all={all} />}
+      <div className="scroll changes-tree">
+        <div className="tree-node root" onClick={() => setRootOpen(!rootOpen)}>
+          <Icon name={rootOpen ? "expand_more" : "chevron_right"} size={16} className="dim" />
+          <input
+            type="checkbox"
+            disabled={changed.length !== 1}
+            checked={changed.length === 1 && checked.length === filesOf(changed[0].path).length && checked.length > 0}
+            onChange={() => changed.length === 1 && toggleRepo(changed[0].path)}
+            onClick={(e) => e.stopPropagation()}
+            title={changed.length > 1 ? "Commits are per repository — check a repository or its files" : "Check all changes"}
+            aria-label="Check all changes"
+          />
+          <span className="node-title">Changes</span>
+          <span className="dim">{total} {total === 1 ? "file" : "files"}</span>
         </div>
-      )}
-    </section>
-  );
-}
-
-function FileSection({
-  title, files, repo, staged, onStage, onUnstage, onDiscard, children,
-}: {
-  title: string;
-  files: FileEntry[];
-  repo: string;
-  staged: boolean;
-  onStage?: (f: FileEntry) => void;
-  onUnstage?: (f: FileEntry) => void;
-  onDiscard?: (f: FileEntry) => void;
-  children?: ReactNode;
-}) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div className="git-section">
-      <div className="sub-head clickable" onClick={() => setOpen(!open)}>
-        <Icon name={open ? "expand_more" : "chevron_right"} size={14} />
-        <span>{title}</span>
-        <span className="count">{files.length}</span>
-        <span className="hover-actions always" onClick={(e) => e.stopPropagation()}>{children}</span>
+        {rootOpen &&
+          shown.map((r) => {
+            const files = filesOf(r.path);
+            const isSel = sel.repo === r.path;
+            const n = isSel ? checked.length : 0;
+            const st = status[r.path];
+            return (
+              <div key={r.path} className="repo-node" style={{ "--repo-color": colorOf(r) } as CSSProperties}>
+                <div className="tree-node" onClick={() => toggleOpen(r.path)}>
+                  <Icon name={open.has(r.path) ? "expand_more" : "chevron_right"} size={16} className="dim" />
+                  <input
+                    type="checkbox"
+                    checked={n > 0 && n === files.length}
+                    ref={(el) => {
+                      if (el) el.indeterminate = n > 0 && n < files.length;
+                    }}
+                    disabled={!files.length}
+                    onChange={() => toggleRepo(r.path)}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Check ${labelOf(r)}`}
+                  />
+                  <span className="repo-swatch" />
+                  <span className="repo-label ellipsis" title={r.path}>{labelOf(r)}</span>
+                  <span className="dim nowrap">{files.length} {files.length === 1 ? "file" : "files"}</span>
+                  {files.length ? (
+                    // No switching with uncommitted changes: the branch is shown, not offered.
+                    <span className="branch-label dim nowrap" title="Commit or roll back the changes to switch branches">
+                      <Icon name="alt_route" size={13} /> <span className="ellipsis">{st?.branch ?? "detached"}</span>
+                    </span>
+                  ) : (
+                    <span className="branch-chip" onClick={(e) => e.stopPropagation()}>
+                      <BranchMenu repo={r.path} current={st?.branch ?? null} onDone={() => refreshStatus(r.path)} />
+                    </span>
+                  )}
+                  {!files.length && (
+                    // Like the branch menu: pull/push only on a clean repo (Commit and Push covers the rest).
+                    <span className="hover-actions" onClick={(e) => e.stopPropagation()}>
+                      <IconButton icon="download" size={14} title={`Pull${st?.behind ? ` (${st.behind} behind)` : ""}`} onClick={() => run("pull", () => api.pull(r.path), [r.path])} disabled={!!busy} />
+                      <IconButton icon="upload" size={14} title={`Push${st?.ahead ? ` (${st.ahead} ahead)` : ""}`} onClick={() => run("push", () => api.push(r.path), [r.path])} disabled={!!busy} />
+                    </span>
+                  )}
+                </div>
+                {open.has(r.path) &&
+                  files.map((f) => {
+                    const isDir = f.path.endsWith("/");
+                    const name = basename(f.path.replace(/\/$/, ""));
+                    const dir = f.path.includes("/") ? dirname(f.path.replace(/\/$/, "")) : "";
+                    const isFocused = focused?.repo === r.path && focused.file.path === f.path;
+                    return (
+                      <div
+                        key={f.path}
+                        className={cx("tree-node file", isFocused && "focused")}
+                        onClick={() => {
+                          setFocused({ repo: r.path, file: f });
+                          if (!isDir) openDiff(r.path, f, false, true);
+                        }}
+                        title={f.orig ? `${f.orig} → ${f.path}` : f.path}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSel && sel.paths.has(f.path)}
+                          onChange={() => toggleFile(r.path, f.path)}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Check ${name}`}
+                        />
+                        <img className="file-icon" src={fileIconUrl(f.path)} alt="" />
+                        <span className={cx("ellipsis", fileClass(f))}>
+                          {name}
+                          {dir && dir !== "/" && <span className="dim"> {dir}</span>}
+                        </span>
+                        <span className="hover-actions">
+                          {!isDir && fileLetter(f) !== "D" && <IconButton icon="description" size={14} title="Open file" onClick={stop(() => openFile(`${r.path}/${f.path}`, true))} />}
+                        </span>
+                        <span className={cx("letter", `l-${fileLetter(f)}`)}>{fileLetter(f)}</span>
+                      </div>
+                    );
+                  })}
+              </div>
+            );
+          })}
+        {!changed.length && <p className="empty-note">No changes in any repository.</p>}
+        {clean.length > 0 && (
+          <button className="link-btn clean-toggle" onClick={() => setShowClean(!showClean)} aria-expanded={showClean} title="Repositories without uncommitted changes">
+            <Icon name={showClean ? "expand_less" : "expand_more"} size={14} /> {clean.length} {clean.length === 1 ? "repo" : "repos"} with no changes · {showClean ? "Hide" : "Show"}
+          </button>
+        )}
+        <button className="link-btn clean-toggle" onClick={() => setShowWorktrees(!showWorktrees)} aria-expanded={showWorktrees}>
+          <Icon name={showWorktrees ? "expand_less" : "expand_more"} size={14} /> Worktrees
+        </button>
+        {showWorktrees && repos.filter((r) => r.kind !== "worktree").map((r) => <Worktrees key={r.path} project={project} repo={r} all={all} label={labelOf(r)} />)}
       </div>
-      {open &&
-        files.map((f) => {
-          const letter = statusLetter(f, staged);
-          const isDir = f.path.endsWith("/");
-          const name = basename(f.path.replace(/\/$/, ""));
-          const dir = f.path.includes("/") ? dirname(f.path.replace(/\/$/, "")) : "";
-          return (
-            <div key={f.path} className="git-row" onClick={() => !isDir && openDiff(repo, f, staged)} title={f.orig ? `${f.orig} → ${f.path}` : f.path}>
-              <img className="file-icon" src={fileIconUrl(f.path)} alt="" />
-              <span className="ellipsis">
-                {name}
-                {dir && dir !== "/" && <span className="dim"> {dir}</span>}
-              </span>
-              <span className="hover-actions">
-                {!isDir && letter !== "D" && <IconButton icon="description" title="Open file" onClick={stop(() => openFile(`${repo}/${f.path}`, true))} />}
-                {onDiscard && <IconButton icon="undo" title="Discard changes" onClick={stop(() => onDiscard(f))} />}
-                {onStage && <IconButton icon="add" title="Stage" onClick={stop(() => onStage(f))} />}
-                {onUnstage && <IconButton icon="remove" title="Unstage" onClick={stop(() => onUnstage(f))} />}
-              </span>
-              <span className={cx("letter", `l-${letter === "?" ? "U" : letter}`)}>{letter}</span>
-            </div>
-          );
-        })}
+
+      <div className="commit-area">
+        {note && (
+          <div className="commit-note" role="status">
+            <Icon name="info" size={13} /> {note}
+          </div>
+        )}
+        <div className="row commit-opts">
+          <label className="check inline">
+            <input type="checkbox" checked={amend} onChange={(e) => toggleAmend(e.target.checked)} disabled={!sel.repo && !changed.length} />
+            <span>Amend last commit</span>
+          </label>
+          <span className="spacer" />
+          <button className="icon-btn" title={`Generate message with ${provider.label} (checked files)`} onClick={generate} disabled={!!busy || !checked.length}>
+            {busy === "ai" ? <Spinner size={12} /> : <Icon name="auto_awesome" size={16} />}
+          </button>
+        </div>
+        {selRepo && (
+          <div className="commit-target" style={{ "--repo-color": colorOf(selRepo) } as CSSProperties} title={commitLabel}>
+            {amend ? "Amend last commit in" : "Commit to"} <span className="repo-swatch" /> <b className="ellipsis">{label}</b>
+            <span className="dim nowrap">· {checked.length} {checked.length === 1 ? "file" : "files"}</span>
+          </div>
+        )}
+        <textarea
+          value={msg}
+          onChange={(e) => setMsg(e.target.value)}
+          placeholder={selRepo ? `Commit message for ${label} (⌘⏎ to commit)` : "Commit message"}
+          rows={5}
+          onKeyDown={(e) => e.key === "Enter" && e.metaKey && commit(false)}
+        />
+        <div className="row gap">
+          <button className="btn primary grow" disabled={!!busy || !msg.trim() || (!checked.length && !amend)} onClick={() => commit(false)} title={commitLabel}>
+            {busy === "commit" ? <Spinner size={12} /> : <Icon name="check" size={14} />} {amend ? "Amend" : "Commit"}
+          </button>
+          <button className="btn" disabled={!!busy || !msg.trim() || (!checked.length && !amend)} onClick={() => commit(true)} title="Commit, then push this repository">
+            {busy === "commit-push" ? <Spinner size={12} /> : <Icon name="upload" size={14} />} Commit and Push
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -309,7 +414,7 @@ function BranchMenu({ repo, current, onDone }: { repo: string; current: string |
   );
 }
 
-function Worktrees({ project, repo, all }: { project: Project; repo: Repo; all: Repo[] }) {
+function Worktrees({ project, repo, all, label }: { project: Project; repo: Repo; all: Repo[]; label: string }) {
   const main = repo.path;
   const list = all.filter((r) => r.parent === main);
   const [branch, setBranch] = useState<string | null>(null);
@@ -342,7 +447,7 @@ function Worktrees({ project, repo, all }: { project: Project; repo: Repo; all: 
     <div className="git-section">
       <div className="sub-head">
         <Icon name="account_tree" size={14} />
-        <span>Worktrees</span>
+        <span className="ellipsis">{label}</span>
         <span className="count">{list.length}</span>
         <span className="hover-actions always">
           <IconButton icon="add" title="New worktree" onClick={() => setBranch("")} />

@@ -220,7 +220,7 @@ export function DiffView({ tab }: { tab: Extract<Tab, { kind: "diff" }> }) {
   useEffect(() => {
     let alive = true;
     api
-      .fileVersions(tab.repo, tab.path, tab.orig, tab.staged)
+      .fileVersions(tab.repo, tab.path, tab.orig, tab.staged, !!tab.head)
       .then((v) => {
         const m = editor.current?.getModel();
         if (!alive || !m) return;
@@ -238,7 +238,7 @@ export function DiffView({ tab }: { tab: Extract<Tab, { kind: "diff" }> }) {
       <div className="view-toolbar">
         <Icon name="difference" size={14} className="accent" />
         <span className="ellipsis">{tab.path}</span>
-        <span className="dim">{tab.staged ? "HEAD ↔ staged" : "staged ↔ working tree"}</span>
+        <span className="dim">{tab.head ? "HEAD ↔ working tree" : tab.staged ? "HEAD ↔ staged" : "staged ↔ working tree"}</span>
         <span className="spacer" />
         <IconButton icon="description" title="Open file" onClick={() => openFile(abs, true)} />
       </div>

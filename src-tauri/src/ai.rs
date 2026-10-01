@@ -228,9 +228,15 @@ fn truncate(s: &str, max: usize) -> &str {
     &s[..end]
 }
 
-async fn commit_context(repo: &str, excludes: &[String]) -> Result<String, String> {
-    let mut spec = vec!["--".to_string(), ".".to_string()];
-    spec.extend(excludes.iter().map(|e| format!(":(exclude){e}")));
+async fn commit_context(repo: &str, excludes: &[String], paths: &[String]) -> Result<String, String> {
+    // Checked files only (commit panel), else the whole repo minus nested repos.
+    let mut spec = vec!["--".to_string()];
+    if paths.is_empty() {
+        spec.push(".".into());
+        spec.extend(excludes.iter().map(|e| format!(":(exclude){e}")));
+    } else {
+        spec.extend(paths.iter().cloned());
+    }
     let diff_args = |extra: &[&str]| {
         let mut a: Vec<String> = vec!["diff".into()];
         a.extend(extra.iter().map(|s| s.to_string()));
@@ -251,7 +257,9 @@ async fn commit_context(repo: &str, excludes: &[String]) -> Result<String, Strin
             Ok(s) => s,
             Err(_) => run(diff_args(&[])).await?,
         };
-        let untracked = run(vec!["ls-files".into(), "--others".into(), "--exclude-standard".into()]).await?;
+        let mut ls: Vec<String> = vec!["ls-files".into(), "--others".into(), "--exclude-standard".into(), "--".into()];
+        ls.extend(paths.iter().cloned());
+        let untracked = run(ls).await?;
         if !untracked.trim().is_empty() {
             stat.push_str(&format!("\nNew untracked files:\n{untracked}"));
         }
@@ -269,8 +277,8 @@ async fn commit_context(repo: &str, excludes: &[String]) -> Result<String, Strin
 
 /// Sends the repo's diff to the configured provider. Only called on an explicit Generate click.
 #[tauri::command]
-pub async fn ai_commit_message(repo: String, excludes: Vec<String>, cfg: AiCfg) -> Result<String, String> {
-    let context = commit_context(&repo, &excludes).await?;
+pub async fn ai_commit_message(repo: String, excludes: Vec<String>, cfg: AiCfg, paths: Option<Vec<String>>) -> Result<String, String> {
+    let context = commit_context(&repo, &excludes, &paths.unwrap_or_default()).await?;
     if cfg.kind == "cli" {
         return run_cli(cfg.cli.as_deref().unwrap_or_default(), &cfg.model, &repo, &context, env::get()).await;
     }
@@ -387,6 +395,23 @@ mod tests {
         });
         let err = chat(&cfg("anthropic", Some(url)), Some("k"), "d").await.unwrap_err();
         assert!(err.contains("429") && err.contains("slow down"), "{err}");
+    }
+
+    /// Proves keys land in the macOS Keychain. Touches the real login keychain (a throwaway
+    /// entry, removed at the end), so it only runs on demand: `cargo test -- --ignored keychain`.
+    #[test]
+    #[ignore]
+    fn keychain_roundtrip() {
+        let e = keyring::Entry::new("com.codevry.ide.selftest", "probe").unwrap();
+        e.set_password("not-a-real-key").unwrap();
+        let found = std::process::Command::new("security")
+            .args(["find-generic-password", "-s", "com.codevry.ide.selftest", "-a", "probe"])
+            .output()
+            .unwrap();
+        assert!(found.status.success(), "entry not visible to `security`");
+        assert_eq!(e.get_password().unwrap(), "not-a-real-key");
+        e.delete_credential().unwrap();
+        assert!(e.get_password().is_err());
     }
 
     #[tokio::test]
