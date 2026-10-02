@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Features · Aira</title>
+<meta name="description" content="Everything Aira does today: projects and spaces, coding agents, scripts, multi-repo git, ports, terminals, the editor and AI commit messages, each shown on demo projects.">
+<meta name="theme-color" content="#0b0b0c">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preload" href="fonts/funnel-display-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/funnel-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="site.css?v=2">
+<script src="site.js?v=2" defer></script>
+<style>
+  .toc { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 2rem 0 0; padding: 0; list-style: none; }
+  .toc a {
+    display: inline-flex; align-items: center; gap: 0.55rem; height: 2.5rem; padding: 0 1rem 0 0.85rem;
+    border: 1px solid hsl(var(--h) 72% 60% / 0.3); border-radius: 999px; background: hsl(var(--h) 40% 12% / 0.45);
+    color: var(--ink); text-decoration: none; font-size: var(--text-sm); font-weight: 500;
+    transition: background-color 0.2s, border-color 0.2s;
+  }
+  .toc a::before { content: ""; width: 0.55rem; height: 0.55rem; border-radius: 0.2rem; background: hsl(var(--h) 72% 60%); }
+  .toc a:hover { border-color: hsl(var(--h) 72% 60% / 0.6); background: hsl(var(--h) 40% 16% / 0.6); }
+
+  .feat {
+    display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 2rem clamp(2rem, 5vw, 4.5rem); align-items: start;
+    padding: clamp(4rem, 8vw, 6.5rem) 0; border-top: 1px solid var(--border);
+  }
+  .feat:nth-of-type(even) .feat-copy { order: 2; }
+  .feat h2 { display: flex; align-items: flex-start; gap: 0.75rem; font-size: clamp(2rem, 1.4rem + 2vw, 2.875rem); }
+  /* The app's project squircle, in the section's hue. */
+  .feat h2 i { flex: none; width: 0.85rem; height: 0.85rem; margin-top: 0.3em; border-radius: 0.3rem; background: hsl(var(--h) 72% 60%); }
+  .feat .lead { margin: 1.1rem 0 0; font-size: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem); line-height: 1.6; color: var(--soft); }
+  .points { display: grid; gap: 1.15rem; margin: 1.75rem 0 0; padding: 0; list-style: none; color: var(--prose); }
+  .points li { position: relative; padding-left: 1.4rem; }
+  .points li::before { content: ""; position: absolute; left: 0.1rem; top: 0.62em; width: 0.45rem; height: 0.45rem; border-radius: 0.15rem; background: hsl(var(--h) 72% 60% / 0.85); }
+  .points a { color: var(--ink); }
+  .points code { color: var(--soft); overflow-wrap: anywhere; }
+
+  /* Media sit on one tinted panel per feature (the coloured-card idea from the home page). */
+  .feat-media {
+    display: grid; gap: clamp(1rem, 2vw, 1.5rem); padding: clamp(0.9rem, 2.2vw, 1.5rem);
+    border: 1px solid hsl(var(--h) 72% 60% / 0.28); border-radius: 18px;
+    background: radial-gradient(120% 70% at 50% 0%, hsl(var(--h) 72% 60% / 0.18), transparent 64%), linear-gradient(hsl(var(--h) 40% 12% / 0.35), transparent 45%), var(--panel);
+    box-shadow: inset 0 1px 0 hsl(var(--h) 72% 80% / 0.12);
+  }
+  .details { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 1rem 1.25rem; }
+  .details figure { margin: 0; display: grid; gap: 0.6rem; justify-items: center; max-width: 100%; }
+  .details img { border-radius: 10px; }
+  .details figcaption, .shot figcaption { font-size: var(--text-sm); color: var(--prose); text-align: center; text-wrap: balance; }
+  .feat-media > .shot { display: grid; gap: 0.6rem; justify-items: center; }
+
+  @media (min-width: 961px) {
+    .feat-copy { position: sticky; top: 6.5rem; }
+  }
+  @media (max-width: 960px) {
+    .feat { grid-template-columns: minmax(0, 1fr); }
+    .feat:nth-of-type(even) .feat-copy { order: 0; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="nav">
+  <a class="brand" href="index.html" aria-label="Aira home"><img src="icon.svg" width="28" height="28" alt=""><span>Aira</span></a>
+  <nav class="links" aria-label="Site">
+    <a href="features.html" aria-current="page">Features</a>
+    <a href="guide.html">Guide</a>
+    <a href="feedback.html">Feedback</a>
+  </nav>
+  <a class="gh" href="https://github.com/DawnImpulse/ide" aria-label="Aira on GitHub">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+  </a>
+  <a class="btn primary small" href="index.html#install">Build from source</a>
+</header>
+
+<main id="content">
+  <header class="page-head wrap">
+    <h1>Features</h1>
+    <p class="lead">Everything Aira does today, one feature at a time. The recordings and screenshots are the real app, running demo projects.</p>
+    <ul class="toc" aria-label="On this page">
+      <li><a href="#projects" style="--h:210">Projects and spaces</a></li>
+      <li><a href="#agents" style="--h:15">Coding agents</a></li>
+      <li><a href="#scripts" style="--h:180">Scripts</a></li>
+      <li><a href="#git" style="--h:285">Git</a></li>
+      <li><a href="#ports" style="--h:330">Ports and memory</a></li>
+      <li><a href="#terminals" style="--h:195">Terminals</a></li>
+      <li><a href="#editor" style="--h:255">Editor and themes</a></li>
+      <li><a href="#ai" style="--h:345">AI commit messages</a></li>
+    </ul>
+  </header>
+
+  <div class="wrap">
+    <section class="feat" id="projects" style="--h:210" aria-labelledby="projects-h">
+      <div class="feat-copy">
+        <h2 id="projects-h"><i></i>Projects and spaces</h2>
+        <p class="lead">Every repo is a project. Every folder you work in is a space.</p>
+        <ul class="points">
+          <li>A colour and an icon for each project.</li>
+          <li>Spaces: the root, a nested package, a worktree.</li>
+          <li>Each space keeps its own tabs, files and Git view.</li>
+          <li>Star a space to pin it to the <b>Spaces</b> tab.</li>
+          <li>Removing one never touches files on disk.</li>
+        </ul>
+      </div>
+      <div class="feat-media">
+        <figure class="clip">
+          <img src="media/spaces.webp" alt="" width="1280" height="800" loading="lazy">
+          <video src="media/spaces.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
+          <button class="clip-btn" type="button" data-name="spaces" hidden>
+            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
+            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
+          </button>
+          <figcaption class="sr-only">Recording: clicking the checkout-v2 space shows its own tab, a Gemini CLI session. Clicking ui-kit shows an empty window. Starring ui-kit and opening the Spaces tab lists the starred spaces from every project.</figcaption>
+        </figure>
+        <div class="details">
+          <figure>
+            <img src="screenshots/project-dialog.webp" alt="Project settings for storefront: its name, an Icon, Emoji and Image picker showing a grid of symbols, 24 colours plus the default, and Remove project." width="548" height="496" loading="lazy">
+            <figcaption>Project settings: name, icon and colour.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="feat" id="agents" style="--h:15" aria-labelledby="agents-h">
+      <div class="feat-copy">
+        <h2 id="agents-h"><i></i>Coding agents</h2>
+        <p class="lead">Start any agent CLI from the <b>+</b> in the tab bar.</p>
+        <ul class="points">
+          <li>Twelve agents built in, plus any custom command.</li>
+          <li>Every space card shows <b>Working</b>, <b>Needs input</b> or <b>Done</b>.</li>
+          <li>Claude Code's subagents nest as they start.</li>
+          <li>A notification when an agent finishes or needs you.</li>
+          <li>Exact status for eight agents, terminal activity for the rest. <a href="guide.html#agents">How each is tracked</a></li>
+        </ul>
+      </div>
+      <div class="feat-media">
+        <figure class="clip">
+          <img src="media/agents.webp" alt="" width="1920" height="1200" loading="lazy">
+          <video src="media/agents.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
+          <button class="clip-btn" type="button" data-name="agents" hidden>
+            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
+            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
+          </button>
+          <figcaption class="sr-only">Recording: the plus button in the tab bar opens the agent menu and Claude Code is chosen. A task is typed into its session; the storefront card switches to Working, and as the session starts Explore, general-purpose and test-writer subagents they appear one by one in a tree under it. In the checkout-v2 space, Gemini CLI shows Done.</figcaption>
+        </figure>
+        <div class="details">
+          <figure>
+            <img src="screenshots/agent-launcher.webp" alt="The agent menu from the plus button: twelve coding agents with their logos, then New terminal and Custom command." width="300" height="478" loading="lazy">
+            <figcaption>The <b>+</b> menu.</figcaption>
+          </figure>
+          <figure>
+            <img src="screenshots/agents-sidebar.webp" alt="The storefront space card: Claude Code is Working, with Explore, general-purpose and test-writer subagents nested underneath." width="287" height="277" loading="lazy">
+            <figcaption>Subagents, nested as they start.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="feat" id="scripts" style="--h:180" aria-labelledby="scripts-h">
+      <div class="feat-copy">
+        <h2 id="scripts-h"><i></i>Scripts</h2>
+        <p class="lead">Your whole stack, one click.</p>
+        <ul class="points">
+          <li>Twelve runners, from bun to make, or any command.</li>
+          <li>Scripts found in <code>package.json</code> and the <code>Makefile</code>.</li>
+          <li>Pin scripts; <b>Start</b> runs them together.</li>
+          <li>Each gets a tab in the project's scripts window.</li>
+          <li>Failures turn red and keep their log.</li>
+        </ul>
+      </div>
+      <div class="feat-media">
+        <figure class="clip">
+          <img src="media/scripts.webp" alt="" width="1280" height="800" loading="lazy">
+          <video src="media/scripts.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
+          <button class="clip-btn" type="button" data-name="scripts" hidden>
+            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
+            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
+          </button>
+          <figcaption class="sr-only">Recording: in the sidebar, the Start button next to storefront's pinned scripts is clicked. dev, storybook and db turn green and open as tabs in the scripts window while the Next.js dev server log streams in. Then Run on the test script: it fails, its tab turns red and the window reads 3 running, 1 failed.</figcaption>
+        </figure>
+        <div class="details">
+          <figure>
+            <img src="screenshots/scripts-sidebar.webp" alt="storefront's scripts in the sidebar: dev, storybook and db running and pinned, test failed." width="287" height="354" loading="lazy">
+            <figcaption>Pinned scripts, running and failed.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="feat" id="git" style="--h:285" aria-labelledby="git-h">
+      <div class="feat-copy">
+        <h2 id="git-h"><i></i>Git</h2>
+        <p class="lead">One changes tree for every repo in the project.</p>
+        <ul class="points">
+          <li>Diff any file against HEAD.</li>
+          <li>Commits go to one repository at a time.</li>
+          <li><b>Generate</b> drafts the message. <a href="#ai">Pick the provider</a></li>
+          <li>Amend, commit and push, pull, fetch all.</li>
+          <li>Branches, worktrees and rollback, all built in.</li>
+        </ul>
+      </div>
+      <div class="feat-media">
+        <figure class="clip">
+          <img src="media/git.webp" alt="" width="1280" height="800" loading="lazy">
+          <video src="media/git.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
+          <button class="clip-btn" type="button" data-name="git" hidden>
+            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
+            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
+          </button>
+          <figcaption class="sr-only">Recording: the Git tab lists changes from three repositories. Clicking pricing.ts opens its diff against HEAD, Generate writes a commit message from the checked files, and Commit removes storefront's files from the list.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="feat" id="ports" style="--h:330" aria-labelledby="ports-h">
+      <div class="feat-copy">
+        <h2 id="ports-h"><i></i>Ports and memory</h2>
+        <p class="lead">See what's on a port, and free it.</p>
+        <ul class="points">
+          <li>Ports grouped by project.</li>
+          <li>A port blocking a script gets flagged.</li>
+          <li>Search any port number.</li>
+          <li>Scripts stop on the spot; other processes ask first.</li>
+          <li>Memory for every terminal, every two seconds.</li>
+        </ul>
+      </div>
+      <div class="feat-media">
+        <figure class="clip">
+          <img src="media/ports.webp" alt="" width="1280" height="800" loading="lazy">
+          <video src="media/ports.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
+          <button class="clip-btn" type="button" data-name="ports" hidden>
+            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
+            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
+          </button>
+          <figcaption class="sr-only">Recording: the ports button in the status bar opens the ports list. Typing 9090 finds a python3 process from the Downloads folder; freeing it leaves "No process of yours is listening on :9090".</figcaption>
+        </figure>
+        <div class="details">
+          <figure>
+            <img src="screenshots/ports.webp" alt="The ports list grouped by project: storefront's dev, db and storybook ports, payments' api and a blocked port 9090, and one process started outside Aira." width="460" height="318" loading="lazy">
+            <figcaption>Ports, grouped by project.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="feat" id="terminals" style="--h:195" aria-labelledby="terminals-h">
+      <div class="feat-copy">
+        <h2 id="terminals-h"><i></i>Terminals</h2>
+        <p class="lead">Your login shell, in the space you're in.</p>
+        <ul class="points">
+          <li><kbd>⌘</kbd><kbd>T</kbd> for a new one, or <b>Open Terminal Here</b> on any folder.</li>
+          <li>Double-click a tab to rename it. <kbd>⌘</kbd><kbd>K</kbd> clears.</li>
+          <li>Every running terminal and its memory, in the status bar.</li>
+          <li>Optional GPU rendering for heavy output.</li>
+        </ul>
+      </div>
+      <div class="feat-media">
+        <figure class="shot">
+          <img src="screenshots/terminals.webp" alt="The Terminals list from the status bar: running terminals across projects, each with its memory." width="406" height="271" loading="lazy">
+          <figcaption>Every running terminal, with its memory.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="feat" id="editor" style="--h:255" aria-labelledby="editor-h">
+      <div class="feat-copy">
+        <h2 id="editor-h"><i></i>Editor and themes</h2>
+        <p class="lead">Light on purpose: Monaco, no language servers.</p>
+        <ul class="points">
+          <li>Click to preview, double-click to keep. <kbd>⌘</kbd><kbd>S</kbd> saves.</li>
+          <li>New file, new folder, Reveal in Finder, Copy Path.</li>
+          <li>Dark, Light, or follow macOS.</li>
+          <li>Any installed font, sizes 9 to 28.</li>
+        </ul>
+      </div>
+      <div class="feat-media">
+        <figure class="clip">
+          <img src="media/editor.webp" alt="" width="1280" height="800" loading="lazy">
+          <video src="media/editor.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
+          <button class="clip-btn" type="button" data-name="editor" hidden>
+            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
+            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
+          </button>
+          <figcaption class="sr-only">Recording: Settings opens with the Dark theme selected. Choosing Light turns the whole window light, and closing Settings shows the editor and sidebar in the light theme.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="screenshots/light-1440.webp" srcset="screenshots/light-1440.webp 1440w, screenshots/light.webp 2880w" sizes="(min-width: 1200px) 640px, 92vw" alt="Aira in the light theme: the same three projects in the sidebar, pricing.ts in the editor and the file tree on the right." width="1440" height="900" loading="lazy">
+          <figcaption>The light theme.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="feat" id="ai" style="--h:345" aria-labelledby="ai-h">
+      <div class="feat-copy">
+        <h2 id="ai-h"><i></i>AI commit messages</h2>
+        <p class="lead">Bring your own model. Nothing is sent until you press Generate.</p>
+        <ul class="points">
+          <li>Cloud: Anthropic, OpenAI, Gemini, OpenRouter, Groq, Mistral, DeepSeek, xAI.</li>
+          <li>Local: Ollama, LM Studio, any OpenAI-compatible server.</li>
+          <li>Agent CLIs: Claude Code, Codex, Gemini CLI, OpenCode, on your own login.</li>
+          <li>Keys stay in the macOS Keychain.</li>
+          <li>Some providers ask once before the first send. <a href="https://github.com/DawnImpulse/ide/blob/main/docs/ai-providers.md">How each was reviewed</a></li>
+        </ul>
+      </div>
+      <div class="feat-media">
+        <figure class="shot">
+          <img src="screenshots/settings.webp" alt="Aira's Settings: theme, interface font, editor and terminal font and size, notifications, GPU rendering, and the AI commit message provider, model and API key." width="588" height="742" loading="lazy">
+          <figcaption>Settings, with the commit-message provider at the bottom.</figcaption>
+        </figure>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="foot wrap">
+  <a class="brand" href="index.html"><img src="icon.svg" width="24" height="24" alt="">Aira</a>
+  <nav aria-label="Footer">
+    <a href="features.html">Features</a>
+    <a href="guide.html">Guide</a>
+    <a href="feedback.html">Feedback</a>
+    <a href="https://github.com/DawnImpulse/ide">GitHub</a>
+  </nav>
+  <p>Open source under the <a href="https://github.com/DawnImpulse/ide/blob/main/LICENSE">MIT license</a>. Built with Tauri, React, Monaco and xterm.js. Screenshots and recordings show demo projects.</p>
+</footer>
+</body>
+</html>
