@@ -130,6 +130,7 @@ textarea {
   place-items: center;
   width: 24px;
   height: 24px;
+  padding: 0; /* UA button padding would push the glyph right of center */
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -237,16 +238,8 @@ textarea {
   background: transparent;
   border: 1.5px solid var(--faint);
 }
-.pulse {
-  animation: pulse 1.6s ease-in-out infinite;
-}
 .spin {
   animation: spin 1s linear infinite;
-}
-@keyframes pulse {
-  50% {
-    opacity: 0.35;
-  }
 }
 @keyframes spin {
   to {
@@ -254,7 +247,6 @@ textarea {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pulse,
   .spin {
     animation: none;
   }
@@ -353,6 +345,17 @@ textarea {
 .project-bar .card-sub .changes {
   margin-left: 4px;
 }
+.project-bar .scripts-summary {
+  gap: 12px;
+}
+.scripts-summary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.scripts-summary .failed {
+  color: var(--red);
+}
 .right-body {
   flex: 1;
   min-height: 0;
@@ -385,6 +388,17 @@ textarea {
   align-items: center;
   gap: 6px;
   padding: 0 8px 0 12px;
+}
+/* one centered column: the button stretches to the tab strip's width */
+.left-head {
+  flex-shrink: 0;
+  display: grid;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 8px;
+}
+.left-head .btn {
+  justify-content: center;
 }
 .panel-title {
   flex: 1;
@@ -986,6 +1000,42 @@ textarea {
 .term-row .ellipsis {
   flex: 1;
 }
+.ports-popover {
+  width: 420px;
+}
+.ports-project {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.port-row .port-num {
+  min-width: 46px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.port-row .ellipsis {
+  flex: 1;
+}
+.port-row .mono {
+  font-size: 11px;
+}
+.port-row .icon-btn {
+  margin-left: 0;
+}
+.port-row.warn .port-num {
+  color: var(--amber);
+}
+.port-row.free {
+  cursor: default;
+}
+.port-row.free:hover {
+  background: none;
+}
+.port-free {
+  margin-right: 6px;
+  color: var(--green);
+  font-size: 11px;
+}
 .term-row .icon-btn {
   margin-left: 0;
 }
@@ -1290,7 +1340,6 @@ textarea {
   place-items: center;
   width: 18px;
   height: 18px;
-  margin-left: -4px;
   border: 0;
   background: none;
   color: var(--dim);
@@ -1491,14 +1540,35 @@ textarea {
 /* "Scripts" lines up with space titles (card padding + border). */
 .scripts .sub-head {
   padding-left: 9px;
+  border-radius: 10px;
   font-weight: 700;
   color: var(--project-color);
+}
+/* Compact chevron: same footprint as the plain icon it replaced, so "Scripts" stays aligned. */
+.scripts .sub-head > .icon-btn:first-child {
+  width: 14px;
+  height: 18px;
+  color: inherit;
+}
+.scripts .sub-head:hover {
+  background: var(--hover);
+}
+/* Its scripts window is open: same treatment as a selected space card. */
+.scripts .sub-head.selected {
+  background: var(--elev);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 .script-row:hover {
   background: color-mix(in srgb, var(--project-color) 10%, transparent);
 }
 .start-toggle.on {
   color: var(--project-color);
+}
+.start-toggle.on .msi {
+  font-variation-settings: "FILL" 1;
+}
+.script-row:not(:hover) .start-toggle:not(.on) {
+  visibility: hidden;
 }
 /* Spaces view: the project color is the card's own left edge (no separate bracket → no double line). */
 .starred-space .space-card {

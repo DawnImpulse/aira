@@ -5,11 +5,11 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Channel } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
-import { api, type HookEvent, type PtyMessage, type Script, type Settings } from "../ipc";
-import { dropTab, notify, openTerminalTab, projectById, scriptCwd, setActiveProject, spaceOfPath, uid, updateConfig, useStore, type AgentStatus, type Term } from "../store";
+import { api, type HookEvent, type Project, type PtyMessage, type Script, type Settings } from "../ipc";
+import { dropTab, notify, openTerminalTab, projectById, scriptCwd, scriptsWindow, spaceOfPath, uid, updateConfig, useStore, type AgentStatus, type Term } from "../store";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { agentById, type Agent } from "./agents";
-import { ask } from "@tauri-apps/plugin-dialog";
+import { ask, message } from "@tauri-apps/plugin-dialog";
 import { emptyTree, fold, normalize, type TreeState } from "./agentEvents";
 
 // Lazy accessor: store.ts and this module import each other.
@@ -206,7 +206,8 @@ export function stop(key: string) {
   api.ptyKill(t.sessionId).catch(() => {});
 }
 
-export async function restart(key: string) {
+/** `projectId`: whose scripts window shows a restarted script (default: where its tab is, else its owner's). */
+export async function restart(key: string, projectId?: string) {
   const t = get().terms[key];
   if (t?.sessionId && (t.status === "running" || t.status === "stopping")) {
     const exited = new Promise<void>((resolve) => {
@@ -217,8 +218,40 @@ export async function restart(key: string) {
     await exited;
     setTerm(key, { status: "exited" });
   }
-  if (t?.scriptId) return runScript(t.scriptId);
+  if (t?.scriptId) return runScript(t.scriptId, true, projectId);
   await startSession(key);
+}
+
+const live = (t?: Term): t is Term => !!t?.sessionId && (t.status === "running" || t.status === "stopping");
+
+/** Terminals among `keys` that are running something: a script/command/agent, or a shell with a foreground job. */
+export async function busyTerms(keys: string[]): Promise<Term[]> {
+  const running = keys.map((k) => get().terms[k]).filter(live);
+  const shells = running.filter((t) => !t.scriptId && !t.command).map((t) => t.sessionId!);
+  const busy = new Set(await api.ptyBusy(shells).catch(() => shells)); // unknown counts as busy
+  return running.filter((t) => t.scriptId || t.command || busy.has(t.sessionId!));
+}
+
+export const runningList = (ts: Term[]) => ts.map((t) => `• ${t.name}`).join("\n");
+
+/** Cancel / Force close when any of `keys` is running something; true = go ahead (they get killed). */
+export async function confirmKill(keys: string[], title: string, intro = "") {
+  const busy = await busyTerms(keys);
+  if (!busy.length) return true;
+  const n = busy.length === 1 ? "This terminal is" : `${busy.length} terminals are`;
+  return ask(`${intro}${n} still running:\n${runningList(busy)}`, { title, kind: "warning", okLabel: "Force close", cancelLabel: "Cancel" });
+}
+
+/** Closing a script's tab: stop it, or let it keep running in the background (reopen from the sidebar). */
+export async function confirmScriptClose(key: string): Promise<"stop" | "keep" | "cancel"> {
+  const t = get().terms[key];
+  if (!live(t)) return "keep";
+  const r = await message(`"${t.name}" is still running.`, {
+    title: "Close terminal",
+    kind: "warning",
+    buttons: { yes: "Force close", no: "Keep running", cancel: "Cancel" },
+  });
+  return r === "Force close" ? "stop" : r === "Keep running" ? "keep" : "cancel";
 }
 
 /** Kills (if needed) and forgets a terminal. `closeTab` true also closes its tab. */
@@ -277,26 +310,34 @@ function ensureScriptTerm(scriptId: string, projectId?: string) {
   }));
 }
 
-export async function runScript(scriptId: string, activate = true) {
-  ensureScriptTerm(scriptId);
+/** Opens in `projectId`'s scripts window (default: its owner's), unless its tab is already in the current window. */
+export async function runScript(scriptId: string, activate = true, projectId?: string) {
+  ensureScriptTerm(scriptId, projectId);
   const t = get().terms[scriptId];
   if (!t) return;
-  openTerminalTab(scriptId, activate);
+  openTerminalTab(scriptId, activate, scriptsWindow(projectId ?? t.projectId));
   if (t.status !== "running" && t.status !== "stopping") await startSession(scriptId);
 }
 
 export function showScript(scriptId: string, projectId: string) {
   ensureScriptTerm(scriptId, projectId);
-  openTerminalTab(scriptId);
+  openTerminalTab(scriptId, true, scriptsWindow(projectId));
 }
 
-/** The project's Start button: its start set (still linked), or every script when none is ticked. */
+/** What the project's Start button launches: its ticked scripts (still linked), or every script when none is ticked. */
+const startSet = (p: Project) => {
+  const picked = p.startScriptIds.filter((id) => p.scriptIds.includes(id));
+  return picked.length ? picked : p.scriptIds;
+};
+
 export function runStart(projectId: string) {
   const p = projectById(projectId);
-  if (!p) return;
-  setActiveProject(projectId); // its tabs open in its space
-  const picked = p.startScriptIds.filter((id) => p.scriptIds.includes(id));
-  (picked.length ? picked : p.scriptIds).forEach((id, i) => runScript(id, i === 0));
+  if (p) startSet(p).forEach((id, i) => runScript(id, i === 0, projectId)); // into its scripts window
+}
+
+/** Stops every script of the project (Start's counterpart while any of them runs). */
+export function stopAllScripts(projectId: string) {
+  projectById(projectId)?.scriptIds.forEach((id) => stop(id));
 }
 
 // ---------- coding-agent activity ----------

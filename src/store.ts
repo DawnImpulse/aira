@@ -3,9 +3,9 @@ import type { PanelImperativeHandle } from "react-resizable-panels";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
-import { api, type Config, type FileEntry, type GitStatus, type Project, type Repo, type Script, type Space, type SpaceView, type Tab, type TermSnapshot } from "./ipc";
+import { api, type Config, type FileEntry, type GitStatus, type PortInfo, type Project, type Repo, type Script, type Space, type SpaceView, type Tab, type TermSnapshot } from "./ipc";
 import { disposeModel, reloadIfClean, setEditorTheme } from "./lib/monaco";
-import { newTerminal, removeTerm, setTerminalTheme } from "./lib/terminals";
+import { busyTerms, confirmKill, confirmScriptClose, newTerminal, removeTerm, runningList, setTerminalTheme, stop as stopTerm } from "./lib/terminals";
 import { nextIdentity } from "./lib/identity";
 import { AGENTS } from "./lib/agents";
 
@@ -63,6 +63,7 @@ interface State {
   dirty: Record<string, boolean>; // file path → unsaved edits
   dialog: Dialog;
   restore: string[]; // script ids running at last quit
+  ports: PortInfo[]; // listening TCP ports (lib/ports)
   toast: string | null;
 }
 
@@ -106,6 +107,7 @@ export const useStore = create<State>(() => ({
   dirty: {},
   dialog: null,
   restore: [],
+  ports: [],
   toast: null,
 }));
 
@@ -173,6 +175,10 @@ export const projectOf = (path: string) =>
 export const allRepos = () => Object.values(get().repos).flat();
 
 export const primarySpace = (p: Project) => p.spaces.find((s) => s.dir === p.path) ?? p.spaces[0];
+/** A project's scripts get a window (main tabs + right panel) of their own, beside its spaces' windows. */
+export const scriptsWindow = (projectId: string) => `scripts:${projectId}`;
+const projectOfWindow = (c: Config, win: string | null | undefined) =>
+  c.projects.find((p) => win === scriptsWindow(p.id) || p.spaces.some((s) => s.id === win));
 /** Selected space of the active project (falls back to its primary space). */
 export function activeSpace(): Space | undefined {
   const p = activeProject();
@@ -259,12 +265,14 @@ function normalize(raw: Partial<Config> | null): Config {
   if (!c.projects.some((p) => p.id === c.layout.activeProjectId)) c.layout.activeProjectId = c.projects[0]?.id ?? null;
   // The open tabs belong to the active space (pre-007 configs: every tab lands in it).
   const active = c.projects.find((p) => p.id === c.layout.activeProjectId);
-  if (!active?.spaces.some((s) => s.id === c.layout.activeSpaceId)) c.layout.activeSpaceId = (active && primarySpace(active)?.id) ?? null;
-  const spaceIds = new Set(c.projects.flatMap((p) => p.spaces.map((s) => s.id)));
+  if (projectOfWindow(c, c.layout.activeSpaceId) !== active) c.layout.activeSpaceId = (active && primarySpace(active)?.id) ?? null;
   c.layout.views = { ...c.layout.views };
-  for (const id of Object.keys(c.layout.views)) if (!spaceIds.has(id) || id === c.layout.activeSpaceId) delete c.layout.views[id];
-  for (const v of [c.layout, ...Object.values(c.layout.views)]) {
-    v.tabs = v.tabs.filter((t) => t.kind !== "terminal" || termKeys.has(t.key));
+  for (const id of Object.keys(c.layout.views)) if (!projectOfWindow(c, id) || id === c.layout.activeSpaceId) delete c.layout.views[id];
+  // Script tabs only live in scripts windows (pre-008 configs had them in space windows).
+  const scriptKeys = new Set(c.layout.terms.filter((t) => t.scriptId).map((t) => t.key));
+  for (const [id, v] of [[c.layout.activeSpaceId, c.layout] as const, ...Object.entries(c.layout.views)]) {
+    const scriptsOk = !!id?.startsWith("scripts:");
+    v.tabs = v.tabs.filter((t) => t.kind !== "terminal" || (termKeys.has(t.key) && (scriptsOk || !scriptKeys.has(t.key))));
     if (!v.tabs.some((t) => t.id === v.activeTab)) v.activeTab = v.tabs[0]?.id ?? null;
   }
   return c;
@@ -309,7 +317,7 @@ export function applySettings() {
 function showSpace(c: Config, projectId: string | null, spaceId: string | null) {
   const l = c.layout;
   if (l.activeSpaceId !== spaceId) {
-    const stillThere = c.projects.some((p) => p.spaces.some((s) => s.id === l.activeSpaceId));
+    const stillThere = !!projectOfWindow(c, l.activeSpaceId);
     if (l.activeSpaceId && stillThere) l.views[l.activeSpaceId] = { tabs: l.tabs, activeTab: l.activeTab, rightView: l.rightView };
     const v: SpaceView = (spaceId && l.views[spaceId]) || { tabs: [], activeTab: null, rightView: "files" };
     if (spaceId) delete l.views[spaceId];
@@ -360,12 +368,22 @@ export function addProject(path: string) {
 
 export async function removeProject(id: string) {
   const p = projectById(id);
-  if (!p || !(await ask(`Remove "${p.name}" from the workspace? Files on disk are not touched.`, { title: "Remove project", kind: "warning", okLabel: "Remove" }))) return;
+  if (!p) return;
+  // Its shells/agents and the scripts it owns go with it; scripts owned by other projects keep running.
+  const { terms, config } = get();
+  const doomed = Object.values(terms)
+    .filter((t) => (t.scriptId ? config.scripts[t.scriptId]?.ownerProjectId === id : t.projectId === id))
+    .map((t) => t.key);
+  const busy = await busyTerms(doomed);
+  const msg = `Remove "${p.name}" from the workspace? Files on disk are not touched.` + (busy.length ? `\n\nStill running, will be force closed:\n${runningList(busy)}` : "");
+  if (!(await ask(msg, { title: "Remove project", kind: "warning", okLabel: busy.length ? "Force close & remove" : "Remove" }))) return;
+  doomed.forEach((k) => removeTerm(k, true));
   updateConfig((c) => {
     c.projects = c.projects.filter((x) => x.id !== id);
     for (const [sid, s] of Object.entries(c.scripts)) if (s.ownerProjectId === id) delete c.scripts[sid];
     for (const x of c.projects) x.scriptIds = x.scriptIds.filter((s) => c.scripts[s]);
     for (const s of p.spaces) delete c.layout.views[s.id];
+    delete c.layout.views[scriptsWindow(id)];
     const next = c.projects[0];
     if (c.layout.activeProjectId === id) showSpace(c, next?.id ?? null, (next && primarySpace(next)?.id) ?? null);
   });
@@ -438,7 +456,14 @@ export async function removeSpace(projectId: string, spaceId: string) {
   const p = projectById(projectId);
   const s = p?.spaces.find((x) => x.id === spaceId);
   if (!p || !s || s.dir === p.path) return; // the primary space can't be removed
-  if (!(await ask(`Remove space "${s.name}"? Its folder stays on disk.`, { title: "Remove space", kind: "warning", okLabel: "Remove" }))) return;
+  // Shells/agents in its window go with it (scripts keep running; reopen from the sidebar).
+  const l = get().config.layout;
+  const view = l.activeSpaceId === spaceId ? l : l.views[spaceId];
+  const doomed = (view?.tabs ?? []).flatMap((t) => (t.kind === "terminal" && !get().terms[t.key]?.scriptId ? [t.key] : []));
+  const busy = await busyTerms(doomed);
+  const msg = `Remove space "${s.name}"? Its folder stays on disk.` + (busy.length ? `\n\nStill running, will be force closed:\n${runningList(busy)}` : "");
+  if (!(await ask(msg, { title: "Remove space", kind: "warning", okLabel: busy.length ? "Force close & remove" : "Remove" }))) return;
+  doomed.forEach((k) => removeTerm(k, true));
   updateConfig((c) => {
     const x = c.projects.find((y) => y.id === projectId);
     if (!x) return;
@@ -563,14 +588,28 @@ export const activateTab = (id: string) => {
   updateConfig((c) => void (c.layout.activeTab = id));
 };
 
-export function openTerminalTab(key: string, activate = true) {
+/** `win`: the window it belongs in (a project's scripts window), unless it's already open in the current one. */
+export function openTerminalTab(key: string, activate = true, win?: string) {
   const id = `term:${key}`;
   if (activate) markSeen([key]);
   updateConfig((c) => {
+    const l = c.layout;
+    const p = projectOfWindow(c, win);
+    if (p && win !== l.activeSpaceId && !l.tabs.some((t) => t.id === id)) {
+      if (activate) showSpace(c, p.id, win!);
+      else {
+        const v = (l.views[win!] ??= { tabs: [], activeTab: null, rightView: "files" });
+        if (!v.tabs.some((t) => t.id === id)) v.tabs.push({ id, kind: "terminal", key });
+        v.activeTab ??= id;
+        return;
+      }
+    }
     if (!c.layout.tabs.some((t) => t.id === id)) insertTab(c, { id, kind: "terminal", key });
     if (activate) c.layout.activeTab = id;
   });
 }
+
+const termWindow = (t?: Term) => (t?.scriptId ? scriptsWindow(t.projectId) : spaceOfPath(t?.cwd ?? "")?.id);
 
 /** Goes to the space whose view holds this terminal's tab (else the space of its folder) and shows it. */
 export function focusTerminal(key: string) {
@@ -578,8 +617,8 @@ export function focusTerminal(key: string) {
   const l = get().config.layout;
   const sid = l.tabs.some((t) => t.id === id)
     ? l.activeSpaceId
-    : (Object.keys(l.views).find((s) => l.views[s].tabs.some((t) => t.id === id)) ?? spaceOfPath(get().terms[key]?.cwd ?? "")?.id);
-  const p = get().config.projects.find((x) => x.spaces.some((s) => s.id === sid));
+    : (Object.keys(l.views).find((s) => l.views[s].tabs.some((t) => t.id === id)) ?? termWindow(get().terms[key]));
+  const p = projectOfWindow(get().config, sid);
   if (p && sid) setActiveSpace(p.id, sid);
   openTerminalTab(key);
 }
@@ -632,8 +671,17 @@ export async function closeTab(id: string | null) {
     if (get().dirty[tab.path] && !(await ask(`Discard unsaved changes to ${basename(tab.path)}?`, { kind: "warning", okLabel: "Discard" }))) return;
     disposeModel(tab.path);
   }
-  // Plain shells die with their tab; script terminals keep running (reopen from the sidebar).
-  if (tab.kind === "terminal" && !get().terms[tab.key]?.scriptId) removeTerm(tab.key);
+  // Shells die with their tab; a script can keep running in the background (reopen from the sidebar).
+  if (tab.kind === "terminal") {
+    if (get().terms[tab.key]?.scriptId) {
+      const choice = await confirmScriptClose(tab.key);
+      if (choice === "cancel") return;
+      if (choice === "stop") stopTerm(tab.key);
+    } else {
+      if (!(await confirmKill([tab.key], "Close terminal"))) return;
+      return removeTerm(tab.key, true);
+    }
+  }
   updateConfig((c) => dropTab(c.layout, tab.id));
 }
 
@@ -687,11 +735,12 @@ async function onQuitRequested() {
   quitting = true;
   try {
     const running = Object.values(get().terms).filter((t) => t.status === "running" || t.status === "stopping");
+    const busy = await busyTerms(running.map((t) => t.key));
     const dirty = Object.values(get().dirty).filter(Boolean).length;
     const lines = [];
-    if (running.length) lines.push(`${running.length} running process${running.length > 1 ? "es" : ""} will be stopped.`);
+    if (busy.length) lines.push(`Still running, will be force closed:\n${runningList(busy)}`);
     if (dirty) lines.push(`${dirty} file${dirty > 1 ? "s have" : " has"} unsaved changes that will be lost.`);
-    if (lines.length && !(await ask(lines.join("\n"), { title: "Quit IDE?", kind: "warning", okLabel: "Quit" }))) return;
+    if (lines.length && !(await ask(lines.join("\n\n"), { title: "Quit IDE?", kind: "warning", okLabel: busy.length ? "Force close & quit" : "Quit" }))) return;
     updateConfig((c) => void (c.layout.runningAtQuit = running.flatMap((t) => (t.scriptId ? [t.scriptId] : []))));
     await saveNow();
     await api.quit();

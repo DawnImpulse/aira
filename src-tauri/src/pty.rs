@@ -176,6 +176,16 @@ pub fn pty_ack(state: State<Ptys>, id: String, bytes: usize) {
     }
 }
 
+/// Sessions among `ids` whose shell has a foreground job (not sitting at its prompt).
+/// Background helpers (e.g. powerlevel10k's gitstatusd) don't count.
+#[tauri::command]
+pub fn pty_busy(state: State<Ptys>, ids: Vec<String>) -> Vec<String> {
+    let map = state.0.lock().unwrap();
+    ids.into_iter()
+        .filter(|id| map.get(id).is_some_and(|s| s.master.process_group_leader().is_some_and(|pg| pg as u32 != s.pid)))
+        .collect()
+}
+
 /// Ctrl-C first (lets dev servers shut down cleanly), then SIGTERM/SIGHUP the whole
 /// session + descendants, then SIGKILL survivors. Interactive shells ignore SIGTERM
 /// and put jobs in their own process groups, so killpg alone is not enough.
@@ -202,7 +212,7 @@ pub fn kill_all(app: &AppHandle) {
     terminate(&roots, Duration::from_millis(1500));
 }
 
-fn terminate(roots: &[u32], grace: Duration) {
+pub(crate) fn terminate(roots: &[u32], grace: Duration) {
     use nix::sys::signal::{kill, Signal};
     use nix::unistd::Pid;
     let send = |pids: &HashSet<u32>, sig: Signal| {
@@ -280,5 +290,33 @@ mod tests {
         terminate(&[pid], Duration::from_secs(3));
         let _ = child.wait();
         assert!(tree(&roots).is_empty(), "survivors: {:?}", tree(&roots));
+    }
+
+    /// pty_busy's check: at the prompt the shell owns the foreground; a running command takes it.
+    #[test]
+    fn foreground_job_marks_shell_busy() {
+        let pair = native_pty_system().openpty(PtySize::default()).unwrap();
+        let mut cmd = CommandBuilder::new("/bin/zsh");
+        cmd.args(["-f", "-i"]); // interactive (job control), no rc files
+        let mut child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+        let pid = child.process_id().unwrap();
+        let busy = || pair.master.process_group_leader().is_some_and(|pg| pg as u32 != pid);
+        let until = |want: bool| {
+            let start = Instant::now();
+            while busy() != want && start.elapsed() < Duration::from_secs(10) {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            busy() == want
+        };
+        // Drain output like the app does, or zsh blocks writing its prompt and never reads the command.
+        let mut reader = pair.master.try_clone_reader().unwrap();
+        std::thread::spawn(move || std::io::copy(&mut reader, &mut std::io::sink()));
+        assert!(until(false), "shell never reached its prompt");
+        let mut w = pair.master.take_writer().unwrap(); // kept alive: dropping it sends EOF
+        w.write_all(b"sleep 30\n").unwrap();
+        assert!(until(true), "running `sleep` not seen as busy");
+        terminate(&[pid], Duration::from_secs(3));
+        let _ = child.wait();
     }
 }

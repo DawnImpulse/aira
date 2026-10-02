@@ -181,6 +181,86 @@ export function GitPanel({ project, space }: { project: Project; space: Space })
   const label = selRepo ? labelOf(selRepo) : "";
   const commitLabel = amend && !checked.length ? `Amend ${label}` : `Commit${checked.length ? ` ${checked.length} file${checked.length > 1 ? "s" : ""}` : ""}${label ? ` to ${label}` : ""}`;
 
+  const repoNode = (r: Repo) => {
+    const files = filesOf(r.path);
+    const isSel = sel.repo === r.path;
+    const n = isSel ? checked.length : 0;
+    const st = status[r.path];
+    return (
+      <div key={r.path} className="repo-node" style={{ "--repo-color": colorOf(r) } as CSSProperties}>
+        <div className="tree-node" onClick={() => toggleOpen(r.path)}>
+          <Icon name={open.has(r.path) ? "expand_more" : "chevron_right"} size={16} className="dim" />
+          <input
+            type="checkbox"
+            checked={n > 0 && n === files.length}
+            ref={(el) => {
+              if (el) el.indeterminate = n > 0 && n < files.length;
+            }}
+            disabled={!files.length}
+            onChange={() => toggleRepo(r.path)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Check ${labelOf(r)}`}
+          />
+          <span className="repo-swatch" />
+          <span className="repo-label ellipsis" title={r.path}>{labelOf(r)}</span>
+          <span className="dim nowrap">{files.length} {files.length === 1 ? "file" : "files"}</span>
+          {files.length ? (
+            // No switching with uncommitted changes: the branch is shown, not offered.
+            <span className="branch-label dim nowrap" title="Commit or roll back the changes to switch branches">
+              <Icon name="alt_route" size={13} /> <span className="ellipsis">{st?.branch ?? "detached"}</span>
+            </span>
+          ) : (
+            <span className="branch-chip" onClick={(e) => e.stopPropagation()}>
+              <BranchMenu repo={r.path} current={st?.branch ?? null} onDone={() => refreshStatus(r.path)} />
+            </span>
+          )}
+          {!files.length && (
+            // Like the branch menu: pull/push only on a clean repo (Commit and Push covers the rest).
+            <span className="hover-actions" onClick={(e) => e.stopPropagation()}>
+              <IconButton icon="download" size={14} title={`Pull${st?.behind ? ` (${st.behind} behind)` : ""}`} onClick={() => run("pull", () => api.pull(r.path), [r.path])} disabled={!!busy} />
+              <IconButton icon="upload" size={14} title={`Push${st?.ahead ? ` (${st.ahead} ahead)` : ""}`} onClick={() => run("push", () => api.push(r.path), [r.path])} disabled={!!busy} />
+            </span>
+          )}
+        </div>
+        {open.has(r.path) &&
+          files.map((f) => {
+            const isDir = f.path.endsWith("/");
+            const name = basename(f.path.replace(/\/$/, ""));
+            const dir = f.path.includes("/") ? dirname(f.path.replace(/\/$/, "")) : "";
+            const isFocused = focused?.repo === r.path && focused.file.path === f.path;
+            return (
+              <div
+                key={f.path}
+                className={cx("tree-node file", isFocused && "focused")}
+                onClick={() => {
+                  setFocused({ repo: r.path, file: f });
+                  if (!isDir) openDiff(r.path, f, false, true);
+                }}
+                title={f.orig ? `${f.orig} → ${f.path}` : f.path}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSel && sel.paths.has(f.path)}
+                  onChange={() => toggleFile(r.path, f.path)}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`Check ${name}`}
+                />
+                <img className="file-icon" src={fileIconUrl(f.path)} alt="" />
+                <span className={cx("ellipsis", fileClass(f))}>
+                  {name}
+                  {dir && dir !== "/" && <span className="dim"> {dir}</span>}
+                </span>
+                <span className="hover-actions">
+                  {!isDir && fileLetter(f) !== "D" && <IconButton icon="description" size={14} title="Open file" onClick={stop(() => openFile(`${r.path}/${f.path}`, true))} />}
+                </span>
+                <span className={cx("letter", `l-${fileLetter(f)}`)}>{fileLetter(f)}</span>
+              </div>
+            );
+          })}
+      </div>
+    );
+  };
+
   return (
     <div className="git commit-panel">
       <div className="git-toolbar">
@@ -208,92 +288,14 @@ export function GitPanel({ project, space }: { project: Project; space: Space })
           <span className="node-title">Changes</span>
           <span className="dim">{total} {total === 1 ? "file" : "files"}</span>
         </div>
-        {rootOpen &&
-          shown.map((r) => {
-            const files = filesOf(r.path);
-            const isSel = sel.repo === r.path;
-            const n = isSel ? checked.length : 0;
-            const st = status[r.path];
-            return (
-              <div key={r.path} className="repo-node" style={{ "--repo-color": colorOf(r) } as CSSProperties}>
-                <div className="tree-node" onClick={() => toggleOpen(r.path)}>
-                  <Icon name={open.has(r.path) ? "expand_more" : "chevron_right"} size={16} className="dim" />
-                  <input
-                    type="checkbox"
-                    checked={n > 0 && n === files.length}
-                    ref={(el) => {
-                      if (el) el.indeterminate = n > 0 && n < files.length;
-                    }}
-                    disabled={!files.length}
-                    onChange={() => toggleRepo(r.path)}
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label={`Check ${labelOf(r)}`}
-                  />
-                  <span className="repo-swatch" />
-                  <span className="repo-label ellipsis" title={r.path}>{labelOf(r)}</span>
-                  <span className="dim nowrap">{files.length} {files.length === 1 ? "file" : "files"}</span>
-                  {files.length ? (
-                    // No switching with uncommitted changes: the branch is shown, not offered.
-                    <span className="branch-label dim nowrap" title="Commit or roll back the changes to switch branches">
-                      <Icon name="alt_route" size={13} /> <span className="ellipsis">{st?.branch ?? "detached"}</span>
-                    </span>
-                  ) : (
-                    <span className="branch-chip" onClick={(e) => e.stopPropagation()}>
-                      <BranchMenu repo={r.path} current={st?.branch ?? null} onDone={() => refreshStatus(r.path)} />
-                    </span>
-                  )}
-                  {!files.length && (
-                    // Like the branch menu: pull/push only on a clean repo (Commit and Push covers the rest).
-                    <span className="hover-actions" onClick={(e) => e.stopPropagation()}>
-                      <IconButton icon="download" size={14} title={`Pull${st?.behind ? ` (${st.behind} behind)` : ""}`} onClick={() => run("pull", () => api.pull(r.path), [r.path])} disabled={!!busy} />
-                      <IconButton icon="upload" size={14} title={`Push${st?.ahead ? ` (${st.ahead} ahead)` : ""}`} onClick={() => run("push", () => api.push(r.path), [r.path])} disabled={!!busy} />
-                    </span>
-                  )}
-                </div>
-                {open.has(r.path) &&
-                  files.map((f) => {
-                    const isDir = f.path.endsWith("/");
-                    const name = basename(f.path.replace(/\/$/, ""));
-                    const dir = f.path.includes("/") ? dirname(f.path.replace(/\/$/, "")) : "";
-                    const isFocused = focused?.repo === r.path && focused.file.path === f.path;
-                    return (
-                      <div
-                        key={f.path}
-                        className={cx("tree-node file", isFocused && "focused")}
-                        onClick={() => {
-                          setFocused({ repo: r.path, file: f });
-                          if (!isDir) openDiff(r.path, f, false, true);
-                        }}
-                        title={f.orig ? `${f.orig} → ${f.path}` : f.path}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSel && sel.paths.has(f.path)}
-                          onChange={() => toggleFile(r.path, f.path)}
-                          onClick={(e) => e.stopPropagation()}
-                          aria-label={`Check ${name}`}
-                        />
-                        <img className="file-icon" src={fileIconUrl(f.path)} alt="" />
-                        <span className={cx("ellipsis", fileClass(f))}>
-                          {name}
-                          {dir && dir !== "/" && <span className="dim"> {dir}</span>}
-                        </span>
-                        <span className="hover-actions">
-                          {!isDir && fileLetter(f) !== "D" && <IconButton icon="description" size={14} title="Open file" onClick={stop(() => openFile(`${r.path}/${f.path}`, true))} />}
-                        </span>
-                        <span className={cx("letter", `l-${fileLetter(f)}`)}>{fileLetter(f)}</span>
-                      </div>
-                    );
-                  })}
-              </div>
-            );
-          })}
+        {rootOpen && changed.map(repoNode)}
         {!changed.length && <p className="empty-note">No changes in any repository.</p>}
         {clean.length > 0 && (
           <button className="link-btn clean-toggle" onClick={() => setShowClean(!showClean)} aria-expanded={showClean} title="Repositories without uncommitted changes">
             <Icon name={showClean ? "expand_less" : "expand_more"} size={14} /> {clean.length} {clean.length === 1 ? "repo" : "repos"} with no changes · {showClean ? "Hide" : "Show"}
           </button>
         )}
+        {rootOpen && showClean && clean.map(repoNode)}
         <button className="link-btn clean-toggle" onClick={() => setShowWorktrees(!showWorktrees)} aria-expanded={showWorktrees}>
           <Icon name={showWorktrees ? "expand_less" : "expand_more"} size={14} /> Worktrees
         </button>

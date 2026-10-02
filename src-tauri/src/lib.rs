@@ -4,6 +4,7 @@ mod env;
 mod fs;
 mod git;
 mod mem;
+mod ports;
 mod pty;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -131,6 +132,9 @@ pub fn run() {
             pty::pty_resize,
             pty::pty_ack,
             pty::pty_kill,
+            pty::pty_busy,
+            ports::ports_list,
+            ports::kill_pid,
             fs::read_dir,
             fs::read_file,
             fs::read_file_bytes,

@@ -11,6 +11,18 @@ export interface Script {
   ownerProjectId: string | null;
   /** Last start (ms), for the Scripts tab's order. */
   lastRunAt?: number;
+  /** Ports it was last seen listening on (kept after it stops, for the Ports popover). */
+  ports?: number[];
+}
+
+/** A listening TCP port and its process; `session` = the IDE terminal whose process tree holds it. */
+export interface PortInfo {
+  port: number;
+  pid: number;
+  name: string;
+  cmd: string;
+  cwd: string | null;
+  session: string | null;
 }
 
 /** A working directory inside a project. The primary space is the project root (dir === project.path). */
@@ -164,6 +176,9 @@ export const api = {
   ptyResize: (id: string, cols: number, rows: number) => invoke("pty_resize", { id, cols, rows }),
   ptyAck: (id: string, bytes: number) => invoke("pty_ack", { id, bytes }),
   ptyKill: (id: string) => invoke("pty_kill", { id }),
+  ptyBusy: (ids: string[]) => invoke<string[]>("pty_busy", { ids }),
+  portsList: () => invoke<PortInfo[]>("ports_list"),
+  killPid: (pid: number) => invoke("kill_pid", { pid }),
   quit: () => invoke("quit_app"),
 
   readDir: (path: string) => invoke<DirEntry[]>("read_dir", { path }),

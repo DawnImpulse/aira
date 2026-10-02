@@ -2,11 +2,11 @@ import { Fragment, useRef, useState, type CSSProperties } from "react";
 import { BorderBeam } from "border-beam";
 import { api, type GitStatus, type Project, type Space } from "../ipc";
 import {
-  ago, discover, focusTerminal, isFailed, notify, openFolders, removeScript, removeSpace, repoOf, selectActiveSpace,
+  ago, discover, focusTerminal, isFailed, notify, openFolders, removeScript, removeSpace, repoOf, scriptsWindow,
   setActiveSpace, spaceChanges, spaceOfPath, toggleCollapsed, toggleStar, toggleStartScript, updateConfig, updateProject, useStore,
   type AgentStatus, type SubAgentNode, type Term,
 } from "../store";
-import { restart, runScript, runStart, showScript, stop as stopTerm } from "../lib/terminals";
+import { restart, runScript, runStart, showScript, stop as stopTerm, stopAllScripts } from "../lib/terminals";
 import { agentById } from "../lib/agents";
 import { runnerById } from "../lib/runners";
 import { iconUrl } from "../lib/icons";
@@ -22,7 +22,10 @@ export function LeftPanel() {
   const setView = (v: "projects" | "spaces" | "scripts") => updateConfig((c) => void (c.layout.leftView = v));
   return (
     <div className="panel left-panel">
-      <div className="panel-head">
+      <div className="left-head">
+        <button className="btn" title="Open folder(s)… (⌘O)" onClick={openFolders}>
+          <Icon name="create_new_folder" size={14} /> Add project
+        </button>
         <div className="segmented" role="tablist">
           <button role="tab" aria-selected={view === "projects"} className={cx(view === "projects" && "on")} onClick={() => setView("projects")} title="All projects">
             <Icon name="data_object" size={14} /> Projects
@@ -34,8 +37,6 @@ export function LeftPanel() {
             <Icon name="play_circle" size={14} /> Scripts
           </button>
         </div>
-        <span className="spacer" />
-        <IconButton icon="create_new_folder" title="Open folder(s)… (⌘O)" onClick={openFolders} />
       </div>
       <div className="scroll">
         {view === "projects" && projects.map((p) => <ProjectSection key={p.id} project={p} />)}
@@ -143,7 +144,7 @@ function ProjectSection({ project: p }: { project: Project }) {
 /** Orca-style space: git status plus every agent terminal running in it. Only the selected one is highlighted. */
 function SpaceCard({ project, space, showProject }: { project: Project; space: Space; showProject?: boolean }) {
   useNow();
-  const selected = useStore((s) => s.config.layout.activeProjectId === project.id && selectActiveSpace(s)?.id === space.id);
+  const selected = useStore((s) => s.config.layout.activeSpaceId === space.id);
   const terms = useStore((s) => s.terms);
   const agentStatus = useStore((s) => s.agentStatus);
   const subagents = useStore((s) => s.subagents);
@@ -174,7 +175,7 @@ function SpaceCard({ project, space, showProject }: { project: Project; space: S
             <ProjectIcon icon={project.icon} color={project.color} size={12} /> {project.name}
           </span>
         )}
-        {(running || failed) && <span className={cx("dot", running ? "green pulse" : "red")} title={running ? "Scripts running" : "A script failed"} />}
+        {(running || failed) && <span className={cx("dot", running ? "green" : "red")} title={running ? "Scripts running" : "A script failed"} />}
         <span className="spacer" />
         <span className="hover-actions">
           <IconButton icon="settings" title="Space settings" size={14} onClick={stop(() => openSpaceDialog(project.id, space.id))} />
@@ -340,19 +341,16 @@ function ScriptsView({ projects }: { projects: Project[] }) {
     .sort((a, b) => (scripts[b.id].lastRunAt ?? 0) - (scripts[a.id].lastRunAt ?? 0));
   const running = rows.filter((r) => isLive(terms[r.id]));
   const inactive = rows.filter((r) => !isLive(terms[r.id]));
-  const startCount = active.startScriptIds.filter((id) => active.scriptIds.includes(id)).length;
   const row = ({ p, id }: (typeof rows)[number]) => <ScriptRow key={`${p.id}:${id}`} project={p} id={id} />;
   return (
     <>
       <div className="scripts-filter row">
         <span className="sub-head">Running · {running.length}</span>
         <span className="spacer" />
-        <IconButton
-          icon="play_circle"
-          title={`${active.name}: ${startCount ? `start ${startCount} selected script${startCount > 1 ? "s" : ""}` : "start all scripts"}`}
-          onClick={() => runStart(active.id)}
-          disabled={!active.scriptIds.length}
-        />
+        {running.length > 0 && (
+          // A script linked into several projects is listed once per project: stop each once.
+          <IconButton icon="stop" title="Stop all running scripts" className="red" onClick={() => new Set(running.map((r) => r.id)).forEach((id) => stopTerm(id))} />
+        )}
         <IconButton icon="add" title={`Add script to ${active.name}`} onClick={() => openScriptDialog(active.id)} />
         <IconButton icon="link" title={`Link a script into ${active.name}`} onClick={() => useStore.setState({ dialog: { kind: "link", projectId: active.id } })} />
       </div>
@@ -370,22 +368,39 @@ function ScriptsView({ projects }: { projects: Project[] }) {
   );
 }
 
-/** The project's own scripts, under its spaces (the Scripts tab is the cross-project running view). */
+/** The project's own scripts, under its spaces; clicking the header opens its scripts window (the Scripts tab is the cross-project running view). */
 function ProjectScripts({ project: p }: { project: Project }) {
   const open = !p.scriptsCollapsed;
   const startCount = p.startScriptIds.filter((id) => p.scriptIds.includes(id)).length;
+  const selected = useStore((s) => s.config.layout.activeSpaceId === scriptsWindow(p.id));
+  // While any of its scripts runs, Start becomes Stop all.
+  const running = useStore((s) => p.scriptIds.filter((id) => isLive(s.terms[id])).length);
+  const what = startCount ? `${startCount} selected script${startCount > 1 ? "s" : ""}` : "all scripts";
   return (
     <div className="scripts">
-      <div className="sub-head clickable" onClick={() => updateProject(p.id, { scriptsCollapsed: open })} aria-expanded={open} title={open ? "Collapse scripts" : "Expand scripts"}>
-        <Icon name={open ? "expand_more" : "chevron_right"} size={14} />
+      <div
+        className={cx("sub-head clickable", selected && "selected")}
+        onClick={() => {
+          // Like the project header: opens its window and toggles the list.
+          setActiveSpace(p.id, scriptsWindow(p.id));
+          updateProject(p.id, { scriptsCollapsed: open });
+        }}
+        aria-pressed={selected}
+        title={`Open the scripts window · click to ${open ? "collapse" : "expand"}`}
+      >
+        <IconButton
+          icon={open ? "expand_more" : "chevron_right"}
+          title={open ? "Collapse scripts" : "Expand scripts"}
+          size={14}
+          onClick={stop(() => updateProject(p.id, { scriptsCollapsed: open }))}
+        />
         <span>Scripts{!open && p.scriptIds.length ? ` (${p.scriptIds.length})` : ""}</span>
         <span className="hover-actions always" onClick={(e) => e.stopPropagation()}>
-          <IconButton
-            icon="play_circle"
-            title={startCount ? `Start ${startCount} selected script${startCount > 1 ? "s" : ""}` : "Start all scripts"}
-            onClick={() => runStart(p.id)}
-            disabled={!p.scriptIds.length}
-          />
+          {running ? (
+            <IconButton icon="stop" title={`Stop all scripts (${running} running)`} className="red" onClick={() => stopAllScripts(p.id)} />
+          ) : (
+            <IconButton icon="playlist_play" title={`Start ${what}`} onClick={() => runStart(p.id)} disabled={!p.scriptIds.length} />
+          )}
           <IconButton icon="add" title="Add script" onClick={() => openScriptDialog(p.id)} />
           <IconButton icon="link" title="Link a script from another project" onClick={() => useStore.setState({ dialog: { kind: "link", projectId: p.id } })} />
         </span>
@@ -408,42 +423,44 @@ function ScriptRow({ project, id, inProject }: { project: Project; id: string; i
   const live = isLive(t);
   const foreign = s.ownerProjectId !== project.id;
   const inStart = project.startScriptIds.includes(id);
-  // The terminal tab opens in the active space, so select this row's project first.
-  const inProjectSpace = (fn: () => void) =>
-    stop(() => {
-      setActiveSpace(project.id);
-      fn();
-    });
   return (
     <div
       className={cx("script-row", live && "live")}
       style={projectStyle(project)}
-      onClick={() => {
-        setActiveSpace(project.id);
-        showScript(id, project.id);
-      }}
+      onClick={() => showScript(id, project.id)}
       title={`${s.command}\n${runnerById(s.runner).id === "custom" ? "sh" : s.runner}${s.ownerProjectId === null ? ` · ${s.cwd}` : ""}`}
     >
-      <button className={cx("start-toggle", inStart && "on")} title={inStart ? "Included in Start" : "Include in Start"} aria-pressed={inStart} onClick={stop(() => toggleStartScript(project.id, id))}>
-        <Icon name={inStart ? "check_box" : "check_box_outline_blank"} size={14} />
-      </button>
       {!inProject && <span className="squircle" title={project.name} />}
-      <span className={cx("dot", live ? "green pulse" : isFailed(t) ? "red" : t?.status === "exited" ? "grey" : "hollow")} />
+      <span className={cx("dot", live ? "green" : isFailed(t) ? "red" : t?.status === "exited" ? "grey" : "hollow")} />
       <span className="script-name">{s.name}</span>
       {foreign && <Icon name={s.ownerProjectId === null ? "public" : "link"} size={13} className="dim" title={s.ownerProjectId === null ? "External script" : "Linked from another project"} />}
       {!inProject && <span className="dim nowrap">{project.name}</span>}
       <span className="hover-actions">
         {live ? (
           <>
-            <IconButton icon="restart_alt" title="Restart" onClick={inProjectSpace(() => restart(id))} />
-            <IconButton icon="stop" title="Stop" className="red" onClick={stop(() => stopTerm(id))} />
+            <IconButton icon="restart_alt" title="Restart" onClick={stop(() => restart(id, project.id))} />
+            {inProject && <IconButton icon="stop" title="Stop" className="red" onClick={stop(() => stopTerm(id))} />}
           </>
         ) : (
-          <IconButton icon="play_arrow" title="Run" className="green" onClick={inProjectSpace(() => runScript(id))} />
+          <IconButton icon="play_arrow" title="Run" className="green" onClick={stop(() => runScript(id, true, project.id))} />
         )}
         <IconButton icon="edit" title="Edit" onClick={stop(() => openScriptDialog(project.id, id))} />
         <IconButton icon={foreign ? "link_off" : "delete"} title={foreign ? "Unlink" : "Delete"} onClick={stop(() => removeScript(project.id, id))} />
       </span>
+      {inProject ? (
+        // Pinned (filled) = launched by the header's Start button.
+        <button
+          className={cx("start-toggle", inStart && "on")}
+          title={inStart ? `Started by ${project.name}'s Start button (click to remove)` : `Add to ${project.name}'s Start button`}
+          aria-pressed={inStart}
+          onClick={stop(() => toggleStartScript(project.id, id))}
+        >
+          <Icon name="push_pin" size={14} />
+        </button>
+      ) : (
+        // Scripts tab (the running view): Stop stays in reach, Start belongs to each project.
+        live && <IconButton icon="stop" title="Stop" className="red" onClick={stop(() => stopTerm(id))} />
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { Group, Panel, Separator, useDefaultLayout, usePanelRef } from "react-resizable-panels";
 import { useEffect, type CSSProperties } from "react";
-import { panelApi, selectActiveSpace, togglePanel, useStore } from "./store";
+import { isFailed, panelApi, scriptsWindow, selectActiveSpace, togglePanel, useStore } from "./store";
+import type { Project } from "./ipc";
 import { Icon, IconButton, ProjectIcon } from "./components/ui";
 import { LeftPanel, SpaceGit } from "./components/LeftPanel";
 import { MainTabs } from "./components/MainTabs";
@@ -27,19 +28,56 @@ function TitleBar() {
 function ProjectBar() {
   const project = useStore((s) => s.config.projects.find((p) => p.id === s.config.layout.activeProjectId));
   const space = useStore(selectActiveSpace);
+  const scripts = useStore((s) => !!project && s.config.layout.activeSpaceId === scriptsWindow(project.id));
   if (!project || !space) return null;
   const color = project.color ?? "var(--accent)";
+  // The scripts window's right panel shows the project's primary space (its root folder).
+  const name = scripts ? "Scripts" : space.name !== project.name ? space.name : null;
   return (
     <div className="project-bar" style={{ "--project-color": color } as CSSProperties} title={space.dir}>
       <ProjectIcon icon={project.icon} color={color} size={14} />
       <b className="ellipsis">{project.name}</b>
-      {space.name !== project.name && (
+      {name && (
         <>
           <Icon name="chevron_right" size={14} className="dim" />
-          <span className="ellipsis">{space.name}</span>
+          <span className="ellipsis">{name}</span>
         </>
       )}
-      <SpaceGit project={project} space={space} />
+      {scripts ? <ScriptsSummary project={project} /> : <SpaceGit project={project} space={space} />}
+    </div>
+  );
+}
+
+/** Scripts window: how the project's scripts are doing, instead of git. */
+function ScriptsSummary({ project }: { project: Project }) {
+  // A string keeps the selector's result stable between renders.
+  const counts = useStore((s) => {
+    const n = [0, 0, 0]; // running, failed, not running
+    for (const id of project.scriptIds) {
+      const t = s.terms[id];
+      n[t?.status === "running" || t?.status === "stopping" ? 0 : isFailed(t) ? 1 : 2]++;
+    }
+    return n.join();
+  });
+  const [running, failed, idle] = counts.split(",").map(Number);
+  if (!project.scriptIds.length) return <div className="card-sub dim">No scripts</div>;
+  return (
+    <div className="card-sub scripts-summary">
+      {running > 0 && (
+        <span>
+          <span className="dot green" /> {running} running
+        </span>
+      )}
+      {failed > 0 && (
+        <span className="failed">
+          <span className="dot red" /> {failed} failed
+        </span>
+      )}
+      {idle > 0 && (
+        <span className="dim">
+          <span className="dot hollow" /> {idle} not running
+        </span>
+      )}
     </div>
   );
 }

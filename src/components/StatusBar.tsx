@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import type { PortInfo, Project } from "../ipc";
 import { formatBytes, isFailed, focusTerminal, projectById, repoOf, selectActiveSpace, useStore, type Term } from "../store";
 import { removeTerm, renameTerm, stop as stopTerm } from "../lib/terminals";
-import { cx, Icon, IconButton, stop } from "./ui";
+import { expectedPorts, freePort, projectOfPort, refreshPorts, termOfPort, type Expected } from "../lib/ports";
+import { cx, Icon, IconButton, ProjectIcon, stop } from "./ui";
 
 export function StatusBar() {
   const project = useStore((s) => s.config.projects.find((p) => p.id === s.config.layout.activeProjectId));
@@ -13,6 +15,9 @@ export function StatusBar() {
   const mem = useStore((s) => s.mem);
   const terms = useStore((s) => s.terms);
   const [open, setOpen] = useState(false);
+  const [portsOpen, setPortsOpen] = useState(false);
+  const ports = useStore((s) => s.ports);
+  const ours = ports.filter((p) => projectOfPort(p)).length;
   const live = Object.values(terms).filter((t) => t.status === "running" || t.status === "stopping");
   const termMem = Object.values(mem.sessions).reduce((a, b) => a + b, 0);
 
@@ -37,6 +42,12 @@ export function StatusBar() {
           <Icon name="memory" size={13} /> {formatBytes(mem.app + termMem)}
         </span>
         <div className="popover-anchor">
+          <button className={cx("status-btn", portsOpen && "on")} onClick={() => setPortsOpen(!portsOpen)} title="Ports used by your projects: find and free them">
+            <Icon name="lan" size={13} /> {ours ? `${ours} port${ours > 1 ? "s" : ""}` : "Ports"}
+          </button>
+          {portsOpen && <PortsPopover onClose={() => setPortsOpen(false)} />}
+        </div>
+        <div className="popover-anchor">
           <button className={cx("status-btn", open && "on")} onClick={() => setOpen(!open)}>
             <Icon name="terminal" size={13} className={live.length ? "green" : undefined} /> {live.length} running
           </button>
@@ -47,15 +58,117 @@ export function StatusBar() {
   );
 }
 
-function TerminalsPopover({ onClose }: { onClose: () => void }) {
-  const terms = useStore((s) => s.terms);
-  const sessions = useStore((s) => s.mem.sessions);
+/** Closes a popover on a mousedown outside its anchor. */
+function useOutsideClose(onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onDown = (e: MouseEvent) => !ref.current?.parentElement?.contains(e.target as Node) && onClose();
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
   }, [onClose]);
+  return ref;
+}
+
+/**
+ * Ports per project: what its scripts/terminals listen on, what blocks a port its scripts expect,
+ * and expected ports that are free. Searching lists whatever listens on matching ports.
+ */
+function PortsPopover({ onClose }: { onClose: () => void }) {
+  const ports = useStore((s) => s.ports);
+  const projects = useStore((s) => s.config.projects);
+  const scripts = useStore((s) => s.config.scripts);
+  const [q, setQ] = useState("");
+  const [expected, setExpected] = useState<Record<string, Expected[]>>({});
+  const ref = useOutsideClose(onClose);
+  useEffect(() => void refreshPorts(), []);
+  useEffect(() => {
+    let alive = true;
+    Promise.all(projects.map(async (p) => [p.id, await expectedPorts(p)] as const)).then((e) => alive && setExpected(Object.fromEntries(e)));
+    return () => {
+      alive = false;
+    };
+  }, [projects, scripts]);
+  const query = q.trim().replace(/^:/, "");
+  const hits = ports.filter((p) => String(p.port).startsWith(query)).sort((a, b) => a.port - b.port);
+  const sections = projects.map((p) => <ProjectPorts key={p.id} project={p} all={ports} expected={expected[p.id] ?? []} onOpen={onClose} />);
+  return (
+    <div className="popover up wide ports-popover" ref={ref}>
+      <input autoFocus placeholder="Search a port, e.g. 3000" inputMode="numeric" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search a port" />
+      {query ? (
+        hits.length ? (
+          hits.map((p) => <PortRow key={`${p.pid}:${p.port}`} p={p} label={termOfPort(p)?.name ?? p.cwd ?? ""} onOpen={onClose} />)
+        ) : (
+          <div className="empty-note">No process of yours is listening on :{query}.</div>
+        )
+      ) : (
+        sections
+      )}
+    </div>
+  );
+}
+
+function ProjectPorts({ project, all, expected, onOpen }: { project: Project; all: PortInfo[]; expected: Expected[]; onOpen: () => void }) {
+  // Its own listeners, plus those of scripts linked in from other projects.
+  const mine = all
+    .filter((p) => projectOfPort(p) === project.id || project.scriptIds.includes(termOfPort(p)?.scriptId ?? ""))
+    .sort((a, b) => a.port - b.port);
+  const expectedBy = (port: number) => expected.find((e) => e.port === port)?.label;
+  // An expected port held by something outside this project is what usually breaks `dev`.
+  const blocked = expected.flatMap((e) => all.filter((p) => p.port === e.port && !mine.includes(p)).map((p) => ({ p, e })));
+  const free = expected.filter((e) => !all.some((p) => p.port === e.port));
+  if (!mine.length && !blocked.length && !free.length) return null;
+  return (
+    <>
+      <div className="menu-label ports-project">
+        <ProjectIcon icon={project.icon} color={project.color} size={12} /> {project.name}
+      </div>
+      {mine.map((p) => {
+        const by = expectedBy(p.port);
+        return <PortRow key={`${p.pid}:${p.port}`} p={p} label={termOfPort(p)?.name ?? `outside the IDE${by ? ` · ${by}` : ""}`} onOpen={onOpen} />;
+      })}
+      {blocked.map(({ p, e }) => (
+        <PortRow key={`b${p.pid}:${p.port}`} p={p} label={`blocks ${e.label}`} warn onOpen={onOpen} />
+      ))}
+      {free.map((e) => (
+        <div key={`f${e.port}`} className="menu-item port-row free" title={e.guessed ? "Guessed from the command" : "Seen on an earlier run"}>
+          <span className="port-num">:{e.port}</span>
+          <span className="ellipsis dim">
+            {e.label}
+            {e.guessed && " (guess)"}
+          </span>
+          <span className="port-free">free</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function PortRow({ p, label, warn, onOpen }: { p: PortInfo; label: string; warn?: boolean; onOpen: () => void }) {
+  const t = termOfPort(p);
+  return (
+    <div
+      className={cx("menu-item port-row", warn && "warn")}
+      title={`${p.cmd}${p.cwd ? `\n${p.cwd}` : ""}${t ? "\nClick to open its terminal" : ""}`}
+      onClick={() => {
+        if (!t) return;
+        focusTerminal(t.key);
+        onOpen();
+      }}
+    >
+      <span className="port-num">:{p.port}</span>
+      <span className="ellipsis">{label}</span>
+      <span className="dim mono">
+        {p.name} {p.pid}
+      </span>
+      <IconButton icon="close" title={t?.scriptId ? "Stop the script" : "Force close this process"} className="red" onClick={stop(() => freePort(p))} />
+    </div>
+  );
+}
+
+function TerminalsPopover({ onClose }: { onClose: () => void }) {
+  const terms = useStore((s) => s.terms);
+  const sessions = useStore((s) => s.mem.sessions);
+  const ref = useOutsideClose(onClose);
   const rank = (t: Term) => (t.status === "running" || t.status === "stopping" ? 0 : 1);
   const list = Object.values(terms).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   return (
