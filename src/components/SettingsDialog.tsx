@@ -163,7 +163,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               {saved && <button type="button" className="btn" onClick={() => saveKey("")}>Remove</button>}
             </div>
             <small className="dim">
-              <Icon name="lock" size={12} /> Stored only in your macOS Keychain (service “com.codevry.ide”); never written to the IDE's config or logs.
+              <Icon name="lock" size={12} /> Stored only in your macOS Keychain (service “com.codevry.ide”); never written to Aira's config or logs.
             </small>
           </label>
         )}

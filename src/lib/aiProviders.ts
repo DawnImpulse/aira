@@ -69,7 +69,7 @@ export const AI_PROVIDERS: AiProvider[] = [
   local("lmstudio", "LM Studio", "http://localhost:1234/v1"),
   cli(
     "claude", "Claude Code (claude -p)",
-    "Runs your installed `claude` with your own login (Anthropic's documented headless mode). The IDE never reads your Claude credentials. Handling follows your Claude account's terms and privacy settings.",
+    "Runs your installed `claude` with your own login (Anthropic's documented headless mode). Aira never reads your Claude credentials. Handling follows your Claude account's terms and privacy settings.",
     "ok",
   ),
   cli(

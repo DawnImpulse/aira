@@ -442,9 +442,9 @@ async function ensureRepoHooks(t: Term, a: Agent): Promise<boolean> {
   let pref = p.agentHooks?.[a.id];
   if (!pref) {
     const ok = await ask(
-      `Show ${a.label}'s subagents and status in the IDE for "${p.name}"?\n\n` +
+      `Show ${a.label}'s subagents and status in Aira for "${p.name}"?\n\n` +
         `This creates ${a.repoFiles} in the repository. It's listed in .git/info/exclude so it's never committed, ` +
-        `and it does nothing unless ${a.label} is started from this IDE.` +
+        `and it does nothing unless ${a.label} is started from Aira.` +
         (a.id === "codex" ? "\n\nCodex will ask you once to trust the hook." : ""),
       { title: `Track ${a.label}`, okLabel: "Enable", cancelLabel: "Not now" },
     );
@@ -456,7 +456,7 @@ async function ensureRepoHooks(t: Term, a: Agent): Promise<boolean> {
   }
   if (pref !== "on") return false;
   const r = await api.agentRepoHooks(a.id, t.cwd, true);
-  if (r === "exists") notify(`${a.label}: ${a.repoFiles} already exists in this repo, so the IDE leaves it alone; status uses terminal activity.`);
+  if (r === "exists") notify(`${a.label}: ${a.repoFiles} already exists in this repo, so Aira leaves it alone; status uses terminal activity.`);
   return r === "on";
 }
 

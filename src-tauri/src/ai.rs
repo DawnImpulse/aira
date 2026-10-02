@@ -66,7 +66,7 @@ async fn key_for(cfg: &AiCfg) -> Result<Option<String>, String> {
 
 fn client() -> reqwest::Client {
     reqwest::Client::builder()
-        .user_agent(concat!("IDE/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("Aira/", env!("CARGO_PKG_VERSION")))
         .timeout(Duration::from_secs(120))
         .build()
         .expect("http client")
@@ -80,7 +80,7 @@ fn base(cfg: &AiCfg, default: &str) -> String {
 /// No `HTTP-Referer`: we have no public app URL and must not send a made-up one.
 fn with_attribution(req: reqwest::RequestBuilder, base: &str) -> reqwest::RequestBuilder {
     if base.contains("openrouter.ai") {
-        req.header("X-OpenRouter-Title", "IDE")
+        req.header("X-OpenRouter-Title", "Aira")
     } else {
         req
     }

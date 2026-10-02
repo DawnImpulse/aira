@@ -230,7 +230,7 @@ function AgentTracking({ projectId }: { projectId: string }) {
             <span className="grow ellipsis">
               <b>{a.label}</b> <code className="dim">{a.repoFiles}</code>
             </span>
-            <button type="button" className="btn small" onClick={() => set(a.id, !on)} title={on ? "Delete the IDE's hook file from this project" : "Create it at the next launch"}>
+            <button type="button" className="btn small" onClick={() => set(a.id, !on)} title={on ? "Delete Aira's hook file from this project" : "Create it at the next launch"}>
               {on ? "Remove files" : "Enable"}
             </button>
           </div>

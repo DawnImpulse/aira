@@ -740,7 +740,7 @@ async function onQuitRequested() {
     const lines = [];
     if (busy.length) lines.push(`Still running, will be force closed:\n${runningList(busy)}`);
     if (dirty) lines.push(`${dirty} file${dirty > 1 ? "s have" : " has"} unsaved changes that will be lost.`);
-    if (lines.length && !(await ask(lines.join("\n\n"), { title: "Quit IDE?", kind: "warning", okLabel: busy.length ? "Force close & quit" : "Quit" }))) return;
+    if (lines.length && !(await ask(lines.join("\n\n"), { title: "Quit Aira?", kind: "warning", okLabel: busy.length ? "Force close & quit" : "Quit" }))) return;
     updateConfig((c) => void (c.layout.runningAtQuit = running.flatMap((t) => (t.scriptId ? [t.scriptId] : []))));
     await saveNow();
     await api.quit();

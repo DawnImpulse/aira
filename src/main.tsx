@@ -13,7 +13,7 @@ const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement)
 if (!isTauri()) {
   root.render(
     <div className="welcome">
-      <h2>This is the IDE's dev server, not the app</h2>
+      <h2>This is Aira's dev server, not the app</h2>
       <p className="dim">
         Folders, terminals and git only work in the desktop window that <code>bun tauri dev</code> opens (look for "ide" in the Dock).
       </p>

@@ -18,7 +18,7 @@ fn menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         &[
             &Submenu::with_items(
                 app,
-                "IDE",
+                "Aira",
                 true,
                 &[
                     &PredefinedMenuItem::about(app, None, None)?,
@@ -30,7 +30,7 @@ fn menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                     &PredefinedMenuItem::show_all(app, None)?,
                     &sep()?,
                     // Custom (not predefined) so quitting goes through the running-scripts confirm.
-                    &item("quit", "Quit IDE", "CmdOrCtrl+Q")?,
+                    &item("quit", "Quit Aira", "CmdOrCtrl+Q")?,
                 ],
             )?,
             &Submenu::with_items(

@@ -124,7 +124,7 @@ function ProjectPorts({ project, all, expected, onOpen }: { project: Project; al
       </div>
       {mine.map((p) => {
         const by = expectedBy(p.port);
-        return <PortRow key={`${p.pid}:${p.port}`} p={p} label={termOfPort(p)?.name ?? `outside the IDE${by ? ` · ${by}` : ""}`} onOpen={onOpen} />;
+        return <PortRow key={`${p.pid}:${p.port}`} p={p} label={termOfPort(p)?.name ?? `outside Aira${by ? ` · ${by}` : ""}`} onOpen={onOpen} />;
       })}
       {blocked.map(({ p, e }) => (
         <PortRow key={`b${p.pid}:${p.port}`} p={p} label={`blocks ${e.label}`} warn onOpen={onOpen} />

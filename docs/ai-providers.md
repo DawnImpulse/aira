@@ -1,11 +1,11 @@
 # AI providers: terms and data-use review
 
-**Reviewed 2026-09-30.** Scope: the IDE's **Generate commit message** feature.
+**Reviewed 2026-09-30.** Scope: Aira's **Generate commit message** feature.
 
 How the feature works:
 - It sends one repo's diff (up to ~60k characters) and its recent commit subjects to the provider the user picked.
 - The user supplies their own key (stored in the macOS Keychain), their own installed and logged-in CLI, or a local server.
-- The IDE is not a hosted service and does not resell access.
+- Aira is not a hosted service and does not resell access.
 
 This is an engineering review of the providers' published terms, not legal advice. Items marked ⚠︎ in "Sources" are either:
 - facts confirmed only through secondary sources (the primary page blocked automated fetching), or
@@ -46,12 +46,12 @@ The app can't tell which plan or login a key or CLI uses. Wherever the answer de
 1. **Official endpoints only.** Keys are sent in headers, never in URLs, and are never exposed to the webview or logs (`src-tauri/src/ai.rs`).
 2. **Explicit sends.** Nothing is sent until the user presses **Generate**. Caution and warning providers also need a one-time acknowledgement, stored as `settings.ai.acknowledged`.
 3. **Agent CLIs** (Anthropic's Claude Code legal and compliance terms apply directly):
-   - The IDE spawns the **user's own, unmodified, installed** binary in its documented non-interactive mode.
+   - Aira spawns the **user's own, unmodified, installed** binary in its documented non-interactive mode.
    - It never reads, stores or relays the CLI's OAuth or session tokens.
    - It never offers a "Claude.ai login".
    - It never bundles or pre-installs any CLI.
    - Anthropic's own headless docs show the same pattern: `git diff main | claude -p …`.
-4. **OpenRouter:** sends only the optional `X-OpenRouter-Title: IDE` header. There is no `HTTP-Referer`, because the app has no public URL and a made-up one must not be sent.
+4. **OpenRouter:** sends only the optional `X-OpenRouter-Title: Aira` header. There is no `HTTP-Referer`, because the app has no public URL and a made-up one must not be sent.
 5. **No retry loops.** Rate-limit and quota errors (e.g. 429) are shown as returned.
 
 ## Open points
