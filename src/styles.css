@@ -156,6 +156,7 @@ textarea {
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center; /* stretched buttons (e.g. Commit) keep icon + label centered */
   gap: 5px;
   height: 28px;
   padding: 0 10px;
@@ -396,9 +397,6 @@ textarea {
   justify-content: center;
   gap: 6px;
   padding: 6px 8px;
-}
-.left-head .btn {
-  justify-content: center;
 }
 .panel-title {
   flex: 1;

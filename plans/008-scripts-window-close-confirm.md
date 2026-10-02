@@ -68,3 +68,7 @@ User feedback, 2026-10-01:
 - The header Start icon is now `playlist_play` ("play all").
 - In the scripts window, the project bar shows a summary of the project's scripts (running / failed / not running) instead of the git line.
 - Git tab: the "N repos with no changes" toggle now sits right after the repos with changes, and the clean repos open below it, not at the bottom of the list. The repo row renderer is extracted as `repoNode`.
+- Git commit area:
+  - The AI icon is now a labelled "✨ Generate" button.
+  - `.btn` centers its content, so the wide Commit button no longer pins "✓ Commit" to the left. The `.left-head` override this made redundant is removed.
+  - Generate first checks the provider's saved key. With no key it opens Settings with a note, before any data-use notice.

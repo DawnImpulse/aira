@@ -155,6 +155,11 @@ export function GitPanel({ project, space }: { project: Project; space: Space })
   const provider = aiProvider(ai.provider);
   const generate = async () => {
     if (!selRepo) return;
+    // No key yet: send them to Settings before any data-use notice.
+    if (provider.needsKey && !ai.keySaved[provider.id]) {
+      notify(`Add your ${provider.label} API key in Settings to generate commit messages.`);
+      return useStore.setState({ dialog: { kind: "settings" } });
+    }
     if (provider.risk !== "ok" && !ai.acknowledged[provider.id]) {
       const ok = await ask(`${provider.note}\n\nSend this repository's diff to ${provider.label}?`, {
         title: `Generate with ${provider.label}`,
@@ -314,8 +319,13 @@ export function GitPanel({ project, space }: { project: Project; space: Space })
             <span>Amend last commit</span>
           </label>
           <span className="spacer" />
-          <button className="icon-btn" title={`Generate message with ${provider.label} (checked files)`} onClick={generate} disabled={!!busy || !checked.length}>
-            {busy === "ai" ? <Spinner size={12} /> : <Icon name="auto_awesome" size={16} />}
+          <button
+            className="btn small"
+            title={checked.length ? `Generate a commit message with ${provider.label} from the checked files` : "Check files to generate a message"}
+            onClick={generate}
+            disabled={!!busy || !checked.length}
+          >
+            {busy === "ai" ? <Spinner size={12} /> : <Icon name="auto_awesome" size={14} />} Generate
           </button>
         </div>
         {selRepo && (
