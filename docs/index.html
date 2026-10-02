@@ -6,7 +6,21 @@
 <title>Aira · All your projects, running at once</title>
 <meta name="description" content="Aira is a Mac code editor for working across many repos together: dev servers, coding agents and git for every project you have open, in one window.">
 <meta name="theme-color" content="#0b0b0c">
+<link rel="canonical" href="https://aira.codevry.com/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Aira">
+<meta property="og:title" content="Aira · All your projects, running at once">
+<meta property="og:description" content="Aira is a Mac code editor for working across many repos together: dev servers, coding agents and git for every project you have open, in one window.">
+<meta property="og:url" content="https://aira.codevry.com/">
+<meta property="og:image" content="https://aira.codevry.com/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Aira app window with three projects open, under the headline: All your projects, running at once.">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebSite", "name": "Aira", "url": "https://aira.codevry.com/"}</script>
+<link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preload" href="fonts/funnel-display-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/funnel-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="site.css?v=2">
@@ -156,7 +170,7 @@
 <body>
 <a class="skip" href="#content">Skip to content</a>
 <header class="nav">
-  <a class="brand" href="index.html" aria-label="Aira home"><img src="icon.svg" width="28" height="28" alt=""><span>Aira</span></a>
+  <a class="brand" href="./" aria-label="Aira home"><img src="icon.svg" width="28" height="28" alt=""><span>Aira</span></a>
   <nav class="links" aria-label="Site">
     <a href="features.html">Features</a>
     <a href="guide.html">Guide</a>
@@ -190,7 +204,8 @@
 
   <div class="window-shot">
     <figure class="clip">
-      <img src="media/hero.webp" alt="" width="1920" height="1200" fetchpriority="high">
+      <!-- Low priority: the still stays hidden until its 1.2s reveal, so it mustn't compete with the fonts (mobile LCP). -->
+      <img src="media/hero.webp" alt="" width="1920" height="1200" fetchpriority="low">
       <video src="media/hero.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
       <button class="clip-btn" type="button" data-name="intro" hidden>
         <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
@@ -379,7 +394,7 @@
 </main>
 
 <footer class="foot wrap">
-  <a class="brand" href="index.html"><img src="icon.svg" width="24" height="24" alt="">Aira</a>
+  <a class="brand" href="./"><img src="icon.svg" width="24" height="24" alt="">Aira</a>
   <nav aria-label="Footer">
     <a href="features.html">Features</a>
     <a href="guide.html">Guide</a>

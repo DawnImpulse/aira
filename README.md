@@ -9,7 +9,7 @@ A Mac code editor for working on many projects at once.<br>
 Dev servers, coding agents and git for every repo you have open, in one window.
 </p>
 
-<p align="center"><a href="https://dawnimpulse.github.io/ide/">Website</a> · <a href="https://dawnimpulse.github.io/ide/features.html">Features</a> · <a href="https://dawnimpulse.github.io/ide/guide.html">Guide</a> · <a href="#build">Build</a></p>
+<p align="center"><a href="https://aira.codevry.com/">Website</a> · <a href="https://aira.codevry.com/features.html">Features</a> · <a href="https://aira.codevry.com/guide.html">Guide</a> · <a href="#build">Build</a></p>
 
 ![Aira with three projects open: Claude Code working with subagents, dev servers running, a file open in the editor](docs/screenshots/hero.webp)
 

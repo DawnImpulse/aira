@@ -140,3 +140,4 @@ for (const f of pngs) {
   if (["hero", "git", "scripts", "light"].includes(name)) webp(join(TMP, f), `${name}-1440.webp`, "-resize", "1440", "0");
 }
 console.log(`Wrote ${pngs.length} screenshots to docs/screenshots/`);
+await import("./og.mjs"); // the social card is built from the new hero shot

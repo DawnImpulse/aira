@@ -1,0 +1,4 @@
+User-agent: *
+Disallow:
+
+Sitemap: https://aira.codevry.com/sitemap.xml
