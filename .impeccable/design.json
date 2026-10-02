@@ -1,0 +1,368 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-02T12:00:00.000Z",
+  "title": "Design System: Aira",
+  "extensions": {
+    "colorMeta": {
+      "signal-blue": {
+        "role": "primary",
+        "displayName": "Signal Blue",
+        "canonical": "oklch(72.7% 0.143 257.1)",
+        "tonalRamp": [
+          "oklch(15% 0.143 257.1)",
+          "oklch(26.4% 0.143 257.1)",
+          "oklch(37.9% 0.143 257.1)",
+          "oklch(49.3% 0.143 257.1)",
+          "oklch(60.7% 0.143 257.1)",
+          "oklch(72.1% 0.143 257.1)",
+          "oklch(83.6% 0.143 257.1)",
+          "oklch(95% 0.143 257.1)"
+        ]
+      },
+      "running-green": {
+        "role": "tertiary",
+        "displayName": "Running Green",
+        "canonical": "oklch(75.7% 0.183 150.1)",
+        "tonalRamp": [
+          "oklch(15% 0.16 150.1)",
+          "oklch(26.4% 0.16 150.1)",
+          "oklch(37.9% 0.16 150.1)",
+          "oklch(49.3% 0.16 150.1)",
+          "oklch(60.7% 0.16 150.1)",
+          "oklch(72.1% 0.16 150.1)",
+          "oklch(83.6% 0.16 150.1)",
+          "oklch(95% 0.16 150.1)"
+        ]
+      },
+      "fault-red": {
+        "role": "tertiary",
+        "displayName": "Fault Red",
+        "canonical": "oklch(71.2% 0.181 22.8)",
+        "tonalRamp": [
+          "oklch(15% 0.16 22.8)",
+          "oklch(26.4% 0.16 22.8)",
+          "oklch(37.9% 0.16 22.8)",
+          "oklch(49.3% 0.16 22.8)",
+          "oklch(60.7% 0.16 22.8)",
+          "oklch(72.1% 0.16 22.8)",
+          "oklch(83.6% 0.16 22.8)",
+          "oklch(95% 0.16 22.8)"
+        ]
+      },
+      "attention-amber": {
+        "role": "tertiary",
+        "displayName": "Attention Amber",
+        "canonical": "oklch(79.7% 0.13 82.2)",
+        "tonalRamp": [
+          "oklch(15% 0.13 82.2)",
+          "oklch(26.4% 0.13 82.2)",
+          "oklch(37.9% 0.13 82.2)",
+          "oklch(49.3% 0.13 82.2)",
+          "oklch(60.7% 0.13 82.2)",
+          "oklch(72.1% 0.13 82.2)",
+          "oklch(83.6% 0.13 82.2)",
+          "oklch(95% 0.13 82.2)"
+        ]
+      },
+      "night-ink": {
+        "role": "neutral",
+        "displayName": "Night Ink",
+        "canonical": "oklch(15% 0.002 286.1)",
+        "tonalRamp": [
+          "oklch(15% 0.002 286.1)",
+          "oklch(26.4% 0.002 286.1)",
+          "oklch(37.9% 0.002 286.1)",
+          "oklch(49.3% 0.002 286.1)",
+          "oklch(60.7% 0.002 286.1)",
+          "oklch(72.1% 0.002 286.1)",
+          "oklch(83.6% 0.002 286.1)",
+          "oklch(95% 0.002 286.1)"
+        ]
+      },
+      "raised-graphite": {
+        "role": "neutral",
+        "displayName": "Raised Graphite",
+        "canonical": "oklch(20.2% 0.008 285.7)",
+        "tonalRamp": [
+          "oklch(15% 0.008 285.7)",
+          "oklch(26.4% 0.008 285.7)",
+          "oklch(37.9% 0.008 285.7)",
+          "oklch(49.3% 0.008 285.7)",
+          "oklch(60.7% 0.008 285.7)",
+          "oklch(72.1% 0.008 285.7)",
+          "oklch(83.6% 0.008 285.7)",
+          "oklch(95% 0.008 285.7)"
+        ]
+      },
+      "lamp-white": {
+        "role": "neutral",
+        "displayName": "Lamp White",
+        "canonical": "oklch(92.6% 0.005 286.3)",
+        "tonalRamp": [
+          "oklch(15% 0.005 286.3)",
+          "oklch(26.4% 0.005 286.3)",
+          "oklch(37.9% 0.005 286.3)",
+          "oklch(49.3% 0.005 286.3)",
+          "oklch(60.7% 0.005 286.3)",
+          "oklch(72.1% 0.005 286.3)",
+          "oklch(83.6% 0.005 286.3)",
+          "oklch(95% 0.005 286.3)"
+        ]
+      },
+      "muted-steel": {
+        "role": "neutral",
+        "displayName": "Muted Steel",
+        "canonical": "oklch(64.6% 0.013 286)",
+        "tonalRamp": [
+          "oklch(15% 0.013 286)",
+          "oklch(26.4% 0.013 286)",
+          "oklch(37.9% 0.013 286)",
+          "oklch(49.3% 0.013 286)",
+          "oklch(60.7% 0.013 286)",
+          "oklch(72.1% 0.013 286)",
+          "oklch(83.6% 0.013 286)",
+          "oklch(95% 0.013 286)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Empty-state title in the main area; the largest type in the app."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Dialog titles (15px); sidebar project and space-card titles at 13px."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default for tree rows, tabs, menus and settings."
+      },
+      "body-small": {
+        "displayName": "Body Small",
+        "purpose": "Card meta lines, project bar, status bar."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase 11px section labels and menu group headers."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Editor, diff, terminals and inline paths; follows the user's font setting."
+      },
+      "display": {
+        "displayName": "Display",
+        "purpose": "Website intro headline, centered on the stage."
+      },
+      "site-headline": {
+        "displayName": "Site Headline",
+        "purpose": "Website section headings."
+      },
+      "site-title": {
+        "displayName": "Site Title",
+        "purpose": "Website sub-headings (Git notes)."
+      },
+      "site-lead": {
+        "displayName": "Site Lead",
+        "purpose": "Website intro paragraph."
+      },
+      "site-body": {
+        "displayName": "Site Body",
+        "purpose": "Website reading text."
+      },
+      "site-finale": {
+        "displayName": "Site Finale",
+        "purpose": "Website closing headline (\"Build it.\")."
+      }
+    },
+    "shadows": [
+      {
+        "name": "float",
+        "value": "0 12px 32px rgb(0 0 0 / 0.5)",
+        "purpose": "Popovers, menus, dialogs and tooltips (0.14 alpha in the light theme)."
+      },
+      {
+        "name": "pressed-in-tab",
+        "value": "0 1px 2px rgb(0 0 0 / 0.2)",
+        "purpose": "Active segmented-control item, just off its track."
+      },
+      {
+        "name": "window-frame",
+        "value": "0 0 0 1px #2a2a31, 0 30px 80px -30px rgb(0 0 0 / 0.85)",
+        "purpose": "Website only: app screenshots as floating windows (longer 120px blur on the hero)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "hover",
+        "value": "background 0.12s–0.15s",
+        "purpose": "Hover and color state changes on rows and controls."
+      },
+      {
+        "name": "tooltip-in",
+        "value": "0.12s ease-out, 2px rise, 350ms delay",
+        "purpose": "Tooltip appearance."
+      },
+      {
+        "name": "spinner",
+        "value": "0.8s linear infinite (2.4s under reduced motion)",
+        "purpose": "Work in progress: agents working, Generate, fetch/pull/push."
+      },
+      {
+        "name": "breathe",
+        "value": "4s exp(sin) opacity curve, project-hue wash",
+        "purpose": "A space whose agent finished while out of view, until the space is opened."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "window-min",
+        "value": "900px × 560px"
+      },
+      {
+        "name": "default-window",
+        "value": "1440px × 900px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one main action in a view (Commit, Save). Dark ink label per the Contrast Debt rule.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Commit 2 files</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 28px; padding: 0 10px; border: 1px solid var(--border-strong, #34343c); border-radius: 7px; background: var(--elev, #16161a); color: var(--text, #e6e6ea); font: 13px -apple-system, BlinkMacSystemFont, sans-serif; cursor: pointer; transition: background 0.12s; } .ds-btn-primary { background: var(--accent, #6aa8ff); border-color: var(--accent, #6aa8ff); color: #06101f; } .ds-btn-primary:hover { filter: brightness(1.08); } .ds-btn:focus-visible { outline: 2px solid var(--accent, #6aa8ff); outline-offset: -2px; }"
+    },
+    {
+      "name": "Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Default secondary action (Fetch all, Cancel).",
+      "html": "<button class=\"ds-btn-default\">Fetch all</button>",
+      "css": ".ds-btn-default { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 28px; padding: 0 10px; border: 1px solid var(--border-strong, #34343c); border-radius: 7px; background: var(--elev, #16161a); color: var(--text, #e6e6ea); font: 13px -apple-system, BlinkMacSystemFont, sans-serif; cursor: pointer; transition: background 0.12s; } .ds-btn-default:hover { background: var(--hover, #1c1c21); } .ds-btn-default:focus-visible { outline: 2px solid var(--accent, #6aa8ff); outline-offset: -2px; }"
+    },
+    {
+      "name": "Icon Button",
+      "kind": "button",
+      "refersTo": "icon-button",
+      "description": "24px square glyph action; dim until hovered.",
+      "html": "<button class=\"ds-icon-btn\" aria-label=\"Refresh\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z\"/></svg></button>",
+      "css": ".ds-icon-btn { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--dim, #8d8d96); cursor: pointer; } .ds-icon-btn:hover { background: var(--active, #24242a); color: var(--text, #e6e6ea); } .ds-icon-btn:focus-visible { outline: 2px solid var(--accent, #6aa8ff); outline-offset: -2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Night Ink well; border turns Signal Blue on focus.",
+      "html": "<input class=\"ds-input\" placeholder=\"Commit message\">",
+      "css": ".ds-input { width: 100%; padding: 6px 8px; border: 1px solid var(--border-strong, #34343c); border-radius: 7px; background: var(--bg, #0b0b0c); color: var(--text, #e6e6ea); font: 13px -apple-system, BlinkMacSystemFont, sans-serif; outline: none; } .ds-input::placeholder { color: var(--dim, #8d8d96); } .ds-input:focus { border-color: var(--accent, #6aa8ff); }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "nav",
+      "refersTo": "segmented-item-on",
+      "description": "Sidebar view switcher (Projects / Spaces / Scripts).",
+      "html": "<div class=\"ds-seg\"><button class=\"ds-seg-on\">Projects</button><button>Spaces</button><button>Scripts</button></div>",
+      "css": ".ds-seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--hover, #1c1c21); } .ds-seg button { height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: none; color: var(--dim, #8d8d96); font: 13px -apple-system, BlinkMacSystemFont, sans-serif; cursor: pointer; } .ds-seg button:hover { color: var(--text, #e6e6ea); } .ds-seg .ds-seg-on { background: var(--elev, #16161a); color: var(--text, #e6e6ea); box-shadow: 0 1px 2px rgb(0 0 0 / 0.2); } .ds-seg button:focus-visible { outline: 2px solid var(--accent, #6aa8ff); outline-offset: -2px; }"
+    },
+    {
+      "name": "Status Chip Row",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Status dots plus a count chip, as on script rows and the Git tree.",
+      "html": "<div class=\"ds-status\"><span class=\"ds-dot ds-green\"></span>dev<span class=\"ds-dot ds-red\"></span>test<span class=\"ds-dot ds-hollow\"></span>worker<span class=\"ds-chip\">6 files</span></div>",
+      "css": ".ds-status { display: flex; align-items: center; gap: 6px; color: var(--text, #e6e6ea); font: 13px -apple-system, BlinkMacSystemFont, sans-serif; } .ds-dot { width: 8px; height: 8px; border-radius: 50%; margin-left: 6px; background: var(--faint, #5c5c65); } .ds-green { background: var(--green, #3fcf6e); } .ds-red { background: var(--red, #ff6b6b); } .ds-hollow { background: transparent; border: 1.5px solid var(--faint, #5c5c65); } .ds-chip { margin-left: 8px; padding: 0 5px; border-radius: 4px; background: var(--active, #24242a); color: var(--dim, #8d8d96); font-size: 10.5px; line-height: 16px; }"
+    },
+    {
+      "name": "Menu Popover",
+      "kind": "custom",
+      "refersTo": "popover",
+      "description": "Floating menu with an uppercase group label, the Float shadow and 28px items.",
+      "html": "<div class=\"ds-pop\"><div class=\"ds-pop-label\">Coding agent</div><div class=\"ds-pop-item\">Claude Code</div><div class=\"ds-pop-item ds-pop-on\">Gemini CLI</div><div class=\"ds-pop-item\">New terminal</div></div>",
+      "css": ".ds-pop { min-width: 240px; padding: 6px; border: 1px solid var(--border-strong, #34343c); border-radius: 10px; background: var(--elev, #16161a); box-shadow: 0 12px 32px rgb(0 0 0 / 0.5); color: var(--text, #e6e6ea); font: 13px -apple-system, BlinkMacSystemFont, sans-serif; } .ds-pop-label { padding: 4px 6px; color: var(--dim, #8d8d96); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; } .ds-pop-item { display: flex; align-items: center; min-height: 28px; padding: 0 6px; border-radius: 6px; cursor: pointer; } .ds-pop-item:hover { background: var(--hover, #1c1c21); } .ds-pop-on { color: var(--accent, #6aa8ff); }"
+    },
+    {
+      "name": "Space Card",
+      "kind": "card",
+      "refersTo": "space-card-selected",
+      "description": "Signature card: space title, git line, one row per agent; selected state shown.",
+      "html": "<div class=\"ds-space\"><div class=\"ds-space-title\">storefront</div><div class=\"ds-space-sub\"><span>main ↑2</span><span class=\"ds-amber\">8 changed</span></div><div class=\"ds-space-sub\"><span><span class=\"ds-working\">Working</span> – Claude Code</span><span>now</span></div></div>",
+      "css": ".ds-space { width: 260px; display: flex; flex-direction: column; gap: 2px; padding: 5px 8px 6px; border: 1px solid var(--border-strong, #34343c); border-radius: 10px; background: var(--elev, #16161a); color: var(--text, #e6e6ea); font: 13px -apple-system, BlinkMacSystemFont, sans-serif; } .ds-space-title { font-weight: 600; } .ds-space-sub { display: flex; justify-content: space-between; gap: 4px; color: var(--dim, #8d8d96); font-size: 12px; } .ds-amber { color: var(--amber, #e6b450); } .ds-working { color: var(--green, #3fcf6e); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Switchboard",
+    "overview": "Every open project is a lit channel. The interface is a dark board of quiet, tonal surfaces where each project carries its own color and every server, agent and repository reports its state in a dot, a word or a count, readable without switching to it. Nothing on the board moves or glows until something needs the developer: a failure, a finished agent, a question waiting for input.\n\nThe feel is crisp, fast and utilitarian. Density is high and deliberate: 13px system type, 24 to 28px controls, 26px bars, gaps of 2 to 12px. Ornament is rejected outright; there are no gradients on chrome, no glass, no illustrated empty states, no decorative motion. Depth comes from stepping tone, not from shadows, and color is reserved for meaning: identity (which project), status (what is happening) and the single action accent.\n\nThe system serves PRODUCT.md's principles directly: \"Everything running stays visible\" and \"Interrupt only when it matters\". If a visual element doesn't help someone read the state of many running things at once, it doesn't belong.",
+    "keyCharacteristics": [
+      "Dark-first, with a complete light mirror (dark, light or follow macOS).",
+      "Native Mac type: the system UI font and SF Mono, both user-configurable in Settings.",
+      "Color as signal only: one accent, three status colors, 24 project hues for identity.",
+      "Compact, quiet controls that brighten on hover and show a 2px Signal Blue focus ring.",
+      "Flat tonal layers; shadows only on things that float."
+    ],
+    "rules": [
+      {
+        "name": "The Channel Rule",
+        "body": "Project hues say *which*, never *what*. A project's color never signals running, failed or done; that is the status palette's job.",
+        "section": "colors"
+      },
+      {
+        "name": "The Signal Rule",
+        "body": "Green, red and amber mean exactly one thing each, everywhere: running, failed, needs attention. Never use them for decoration or for project identity.",
+        "section": "colors"
+      },
+      {
+        "name": "The Glass Exception",
+        "body": "Glass appears exactly once: the website nav, after the page scrolls, because content passes under it (72% Site Glass, 18px blur, 1.5 saturation, a 9% white border; solid Site Nav where backdrop-filter isn't supported). Never on cards, never in the app.",
+        "section": "colors"
+      },
+      {
+        "name": "The Lit Text Rule",
+        "body": "On the website, no text sits directly on light. Words over the beams get a Stage Pool or a chip, checked against the brightest pixel behind each line (WCAG 2.2 AA).",
+        "section": "colors"
+      },
+      {
+        "name": "The Contrast Debt",
+        "body": "White text on Signal Blue measures 2.4:1 in the dark theme, below the WCAG 2.2 AA bar PRODUCT.md commits to. Text on Signal Blue is dark ink (#06101f) in new work, as the website already does; the app's primary button still needs this fix.",
+        "section": "colors"
+      },
+      {
+        "name": "The Native Type Rule",
+        "body": "The app never ships a webfont. UI text uses the system font, code uses the monospace the user picked, and sizes stay in pixels on a fixed, dense scale.",
+        "section": "typography"
+      },
+      {
+        "name": "The Uppercase Label Rule",
+        "body": "Uppercase appears only on 11px section labels and always with 0.04em tracking or more. Never uppercase a sentence, a button or a heading.",
+        "section": "typography"
+      },
+      {
+        "name": "The Float-Only Rule",
+        "body": "Resting surfaces never cast shadows. If a panel, card or row needs separation, step its tone or add a Hairline; a shadow means \"this floats above everything else\".",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do let state read at a glance: a dot, one word and a count per row (Working – Claude Code · now, 3 running · 1 failed).",
+      "Do keep controls at 24 to 28px and corners at 6 to 10px (14px only for dialogs).",
+      "Do step tone (Night Ink → Console Black → Raised Graphite) before reaching for a border, and a border before a shadow.",
+      "Do reserve motion for work in progress (a 0.8s spinner, slowed to 2.4s under reduced motion) and for a finished agent's breath.",
+      "Do put dark ink (#06101f) on Signal Blue fills so labels meet WCAG 2.2 AA.",
+      "Do mirror every new color role in the light theme.",
+      "Do show features as recordings of the real app, with demo data and a pause control."
+    ],
+    "donts": [
+      "Don't pulse, blink or breathe a running state. Running is the normal case and stays steady, because routine running states stay quiet.",
+      "Don't use a project hue for status, or a status color for identity.",
+      "Don't add colored side stripes to cards, rows or alerts. The project bracket and its space bars are the only vertical stripes in the system, and they mean identity, never status.",
+      "Don't cast shadows from resting panels, cards or rows.",
+      "Don't introduce gradients, glass or blur on app chrome. On the website, glass is the nav's alone.",
+      "Don't ship a webfont in the app or uppercase anything but 11px section labels.",
+      "Don't make a control taller than 28px inside panels; size belongs to content, not chrome.",
+      "Don't put website text straight onto the beams; use a Stage Pool or a chip.",
+      "Don't add coloured outer glows or ring-plus-wide-shadow frames to cards; the hue wash and border carry the colour.",
+      "Don't autoplay anything with sound, or anything that keeps moving without a pause control."
+    ]
+  }
+}
