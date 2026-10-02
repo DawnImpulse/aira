@@ -35,8 +35,8 @@ export default defineConfig(() => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // 3. tell Vite to ignore watching `src-tauri`, and the website in `docs` (its .html edits would full-reload the app)
+      ignored: ["**/src-tauri/**", "**/docs/**"],
     },
   },
   build: { target: "safari16", chunkSizeWarningLimit: 8000 },
