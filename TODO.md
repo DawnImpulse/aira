@@ -9,7 +9,7 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 
 - [ ] Keyboard shortcuts info in Settings · ~TBD
 - [ ] Small workspaces for branching and doing work · ~TBD
-- [ ] Publish the website (GitHub Pages needs a public repo or a paid plan) · ~TBD
+- [ ] Publish the website on Vercel (import the repo once; `vercel.json` serves `docs/`), then point the README's site links at its URL · ~TBD
 - [ ] Connect the website's feedback form: set `action` on the form in `docs/feedback.html` · ~TBD
 - [ ] Check the website's videos in Safari and on a phone once it's live · ~TBD
 - [ ] Decide whether to rename the GitHub repo to `aira` (site and README links would change) · ~TBD
