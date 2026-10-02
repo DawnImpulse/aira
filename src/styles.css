@@ -1576,6 +1576,26 @@ textarea {
   border-color: var(--border-strong);
   border-left-color: var(--project-color);
 }
+/* Projects view: a bar in front of every space so idle spaces read as items too: neutral when idle, the project's
+   color on the selected one. */
+.project .space-card {
+  position: relative;
+  padding-left: 13px;
+}
+.project .space-card::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--border-strong) 50%, var(--faint)); /* neutral when idle: blackish grey on dark, light grey on light */
+  pointer-events: none;
+}
+.project .space-card.selected::before {
+  background: var(--project-color);
+}
 .project-emoji {
   display: inline-grid;
   place-items: center;
