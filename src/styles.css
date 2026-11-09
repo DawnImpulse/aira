@@ -798,6 +798,10 @@ textarea {
   color: var(--dim);
   text-align: left;
 }
+.form .shortcuts {
+  margin: 0;
+  grid-template-columns: 56px auto;
+}
 .shortcuts dt {
   font-family: var(--font-mono);
   text-align: right;

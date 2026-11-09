@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api, type Settings } from "../ipc";
 import { notify, updateConfig, useStore } from "../store";
 import { AI_PROVIDERS, aiCfg, aiProvider } from "../lib/aiProviders";
 import { hasBinary } from "../lib/agents";
+import { SHORTCUTS } from "../lib/shortcuts";
 import { cx, Icon, Modal } from "./ui";
 
 // Fallbacks if the installed-font lookup fails (non-macOS or CoreText error).
@@ -98,6 +99,16 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           <input type="checkbox" checked={s.terminalWebgl} onChange={(e) => upd((x) => void (x.terminalWebgl = e.target.checked))} />
           <span>GPU (WebGL) terminal rendering – faster for heavy output; turn off if terminals render blank.</span>
         </label>
+
+        <div className="section-title">Keyboard shortcuts</div>
+        <dl className="shortcuts">
+          {SHORTCUTS.map((k) => (
+            <Fragment key={k.keys}>
+              <dt>{k.keys}</dt>
+              <dd>{k.label}</dd>
+            </Fragment>
+          ))}
+        </dl>
 
         <div className="section-title">AI (commit messages)</div>
         <label className="field">

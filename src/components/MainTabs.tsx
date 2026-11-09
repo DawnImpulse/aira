@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { Tab } from "../ipc";
 import { activateTab, basename, closeTab, formatBytes, isFailed, isUnder, notify, openFolders, pinTab, selectActiveSpace, useStore } from "../store";
 import { attach, newTerminal, renameTerm, restart, runScript, startSession, stop as stopTerm } from "../lib/terminals";
@@ -7,6 +7,7 @@ import { fileIconUrl } from "../lib/icons";
 import { DiffView, FileView } from "./Editors";
 import { AgentIcon, cx, Icon, IconButton, Spinner, stop } from "./ui";
 import { popupMenu } from "../lib/menu";
+import { SHORTCUTS } from "../lib/shortcuts";
 
 export function MainTabs() {
   const tabs = useStore((s) => s.config.layout.tabs);
@@ -175,11 +176,12 @@ function Welcome() {
         <Icon name="folder_open" /> Open folder(s)
       </button>
       <dl className="shortcuts">
-        <dt>⌘O</dt><dd>Open folder</dd>
-        <dt>⌘T</dt><dd>New terminal</dd>
-        <dt>⌘W</dt><dd>Close tab</dd>
-        <dt>⌘B</dt><dd>Toggle projects</dd>
-        <dt>⌘,</dt><dd>Settings</dd>
+        {SHORTCUTS.slice(0, 5).map((s) => (
+          <Fragment key={s.keys}>
+            <dt>{s.keys}</dt>
+            <dd>{s.label}</dd>
+          </Fragment>
+        ))}
       </dl>
     </div>
   );
