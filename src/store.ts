@@ -3,7 +3,7 @@ import type { PanelImperativeHandle } from "react-resizable-panels";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
-import { api, type Config, type FileEntry, type GitStatus, type PortInfo, type Project, type Repo, type Script, type Space, type SpaceView, type Tab, type TermSnapshot } from "./ipc";
+import { api, type Config, type FileEntry, type GitStatus, type PortInfo, type Project, type Repo, type Script, type Space, type SpaceView, type Tab, type TermSnapshot, type UsageRow } from "./ipc";
 import { disposeModel, reloadIfClean, setEditorTheme } from "./lib/monaco";
 import { busyTerms, confirmKill, confirmScriptClose, newTerminal, removeTerm, runningList, setTerminalTheme, stop as stopTerm } from "./lib/terminals";
 import { nextIdentity } from "./lib/identity";
@@ -59,6 +59,7 @@ interface State {
   status: Record<string, GitStatus>; // repo path → status
   agentStatus: Record<string, AgentStatus>; // term key → activity (kept out of `terms` so it never triggers saves)
   subagents: Record<string, SubAgentNode[]>; // term key → Claude subagent tree (from hooks)
+  usage: Record<string, UsageRow[]>; // term key → tokens per model (from the Claude transcript)
   mem: { sessions: Record<string, number>; app: number; procs?: Record<string, string[]> };
   dirty: Record<string, boolean>; // file path → unsaved edits
   dialog: Dialog;
@@ -103,6 +104,7 @@ export const useStore = create<State>(() => ({
   status: {},
   agentStatus: {},
   subagents: {},
+  usage: {},
   mem: { sessions: {}, app: 0 },
   dirty: {},
   dialog: null,

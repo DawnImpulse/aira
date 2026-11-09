@@ -10,6 +10,7 @@ import { restart, runScript, runStart, showScript, stop as stopTerm, stopAllScri
 import { agentById } from "../lib/agents";
 import { runnerById } from "../lib/runners";
 import { iconUrl } from "../lib/icons";
+import { usageLabel, usageTitle } from "../lib/usage";
 import { AgentIcon, cx, Icon, IconButton, ProjectIcon, Spinner, stop, useNow } from "./ui";
 
 const openScriptDialog = (projectId: string, scriptId?: string) => useStore.setState({ dialog: { kind: "script", projectId, scriptId } });
@@ -284,12 +285,18 @@ function AgentRow({ t, st }: { t: Term; st?: AgentStatus }) {
     ? t.status === "exited" ? "Exited" : "Not running"
     : working ? "Working" : st?.state === "waiting" ? "Needs input" : st?.everWorked ? "Done" : "Idle";
   const name = t.renamed ? t.name : (a?.label ?? "Agent");
+  const usage = useStore((s) => s.usage[t.key]);
   return (
     <div className="agent-row" onClick={stop(() => focusTerminal(t.key))} title={`${t.name} — click to open`}>
       {working ? <Spinner size={12} color={a?.color} title="Working" /> : <AgentIcon agent={t.agent} size={14} />}
       <span className="ellipsis">
         <span className={cx(working && "working-label", st?.state === "waiting" && live && "waiting-label")}>{label}</span> – {name}
       </span>
+      {usage && (
+        <span className="dim mono usage" title={usageTitle(usage)}>
+          {usageLabel(usage)}
+        </span>
+      )}
       <span className="age">{ago(live ? (st?.since ?? t.startedAt) : t.endedAt)}</span>
     </div>
   );

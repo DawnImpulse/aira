@@ -1327,6 +1327,10 @@ textarea {
   color: var(--dim);
   padding-right: 2px;
 }
+.agent-row .usage {
+  flex-shrink: 0;
+  font-size: 11px;
+}
 .working-label {
   color: var(--green);
 }

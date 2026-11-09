@@ -3,6 +3,7 @@
 //! and hooks (https://code.claude.com/docs/en/hooks). Event files are local and deleted once read.
 
 use serde_json::{json, Value};
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
@@ -99,9 +100,86 @@ fn read_events(dir: &Path) -> Vec<Value> {
         .collect()
 }
 
+// ---------- token usage from the Claude Code transcript ----------
+
+/// Tokens one model used in a session; the frontend prices them.
+#[derive(serde::Serialize, Default)]
+pub struct Usage {
+    pub model: String,
+    pub input: u64,
+    pub output: u64,
+    pub cache_read: u64,
+    pub cache_create: u64,
+}
+
+/// Sums the `usage` of a session's assistant messages, per model. The path comes from a hook payload
+/// Claude wrote, but only transcripts under ~/.claude are readable here.
+#[tauri::command]
+pub async fn agent_usage(app: AppHandle, path: String) -> Result<Vec<Usage>, String> {
+    let home = app.path().home_dir().map_err(err)?;
+    let p = PathBuf::from(path);
+    if !p.starts_with(home.join(".claude")) || !p.extension().is_some_and(|x| x == "jsonl") {
+        return Err("not a Claude transcript".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || read_usage(&p)).await.map_err(err)?
+}
+
+/// One transcript line per content block repeats the message's usage, so the last line per message id wins.
+fn read_usage(path: &Path) -> Result<Vec<Usage>, String> {
+    use std::io::BufRead;
+    // ponytail: full re-read per turn (~1 MB); a byte-offset cache if it shows up in profiles.
+    let f = std::fs::File::open(path).map_err(err)?;
+    let mut by_id: HashMap<String, (String, Value)> = HashMap::new();
+    for line in std::io::BufReader::new(f).lines().map_while(Result::ok) {
+        if !line.contains("\"type\":\"assistant\"") {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
+        let m = &v["message"];
+        let (Some(id), Some(usage)) = (m["id"].as_str(), m.get("usage")) else { continue };
+        by_id.insert(id.to_string(), (m["model"].as_str().unwrap_or("").to_string(), usage.clone()));
+    }
+    let mut out: BTreeMap<String, Usage> = BTreeMap::new();
+    for (model, u) in by_id.into_values() {
+        let n = |k: &str| u[k].as_u64().unwrap_or(0);
+        let e = out.entry(model.clone()).or_insert_with(|| Usage { model, ..Default::default() });
+        e.input += n("input_tokens");
+        e.output += n("output_tokens");
+        e.cache_read += n("cache_read_input_tokens");
+        e.cache_create += n("cache_creation_input_tokens");
+    }
+    Ok(out.into_values().collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn usage_dedupes_by_message_id_and_sums_per_model() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("s.jsonl");
+        let a = |id: &str, model: &str, inp: u64, out: u64| {
+            format!(
+                r#"{{"type":"assistant","message":{{"id":"{id}","model":"{model}","usage":{{"input_tokens":{inp},"output_tokens":{out},"cache_read_input_tokens":10,"cache_creation_input_tokens":5}}}}}}"#
+            )
+        };
+        let lines = [
+            r#"{"type":"user","message":{"role":"user"}}"#.to_string(),
+            a("m1", "claude-opus-5-5", 2, 100), // two blocks of one message: counted once
+            a("m1", "claude-opus-5-5", 2, 100),
+            a("m2", "claude-opus-5-5", 3, 50),
+            a("m3", "claude-haiku-4-5", 7, 1),
+            "not json".to_string(),
+        ];
+        std::fs::write(&p, lines.join("\n")).unwrap();
+        let rows = read_usage(&p).unwrap();
+        assert_eq!(rows.len(), 2);
+        let opus = rows.iter().find(|r| r.model == "claude-opus-5-5").unwrap();
+        assert_eq!((opus.input, opus.output, opus.cache_read, opus.cache_create), (5, 150, 20, 10));
+        let haiku = rows.iter().find(|r| r.model == "claude-haiku-4-5").unwrap();
+        assert_eq!((haiku.input, haiku.output), (7, 1));
+    }
 
     #[test]
     fn hook_command_writes_complete_event_files() {

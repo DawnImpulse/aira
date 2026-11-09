@@ -3,6 +3,7 @@ import type { PortInfo, Project } from "../ipc";
 import { formatBytes, isFailed, focusTerminal, projectById, repoOf, selectActiveSpace, useStore, type Term } from "../store";
 import { removeTerm, renameTerm, stop as stopTerm } from "../lib/terminals";
 import { expectedPorts, freePort, projectOfPort, refreshPorts, termOfPort, type Expected } from "../lib/ports";
+import { usageLabel, usageTitle } from "../lib/usage";
 import { cx, Icon, IconButton, ProjectIcon, stop } from "./ui";
 
 export function StatusBar() {
@@ -184,6 +185,7 @@ function TerminalsPopover({ onClose }: { onClose: () => void }) {
 
 function TermRow({ t, mem, onOpen }: { t: Term; mem?: number; onOpen: () => void }) {
   const [editing, setEditing] = useState(false);
+  const usage = useStore((s) => s.usage[t.key]);
   const live = t.status === "running" || t.status === "stopping";
   return (
     <div
@@ -222,6 +224,11 @@ function TermRow({ t, mem, onOpen }: { t: Term; mem?: number; onOpen: () => void
         </span>
       )}
       <span className="dim">{projectById(t.projectId)?.name ?? ""}</span>
+      {usage && (
+        <span className="dim mono" title={usageTitle(usage)}>
+          {usageLabel(usage)}
+        </span>
+      )}
       <span className="dim mono">{mem !== undefined ? formatBytes(mem) : ""}</span>
       <IconButton icon="edit" title="Rename" onClick={stop(() => setEditing(true))} />
       {live ? (

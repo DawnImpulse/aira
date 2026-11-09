@@ -11,7 +11,7 @@ import { isPermissionGranted, requestPermission, sendNotification } from "@tauri
 import { agentById, type Agent } from "./agents";
 import { popupMenu } from "./menu";
 import { ask, message } from "@tauri-apps/plugin-dialog";
-import { emptyTree, fold, normalize, type TreeState } from "./agentEvents";
+import { emptyTree, fold, normalize, type AgentEvent, type TreeState } from "./agentEvents";
 
 // Lazy accessor: store.ts and this module import each other.
 const get = () => useStore.getState();
@@ -471,11 +471,36 @@ function forgetHooks(key: string) {
   if (!hooked.delete(key)) return;
   hookActive.delete(key);
   hookState.delete(key);
+  transcripts.delete(key);
   api.agentEventsClear(key).catch(() => {});
   useStore.setState((s) => {
     const { [key]: _, ...subagents } = s.subagents;
-    return { subagents };
+    const { [key]: __, ...usage } = s.usage;
+    return { subagents, usage };
   });
+}
+
+// ---------- Claude Code usage: tokens from the session transcript ----------
+
+const transcripts = new Map<string, string>(); // term key → transcript_path from hook payloads
+
+/** The transcript lags the hooks, so re-read 2s after a turn ends and again when the next one starts. */
+function trackUsage(key: string, raw: HookEvent[], evs: AgentEvent[]) {
+  const path = raw.find((e) => e.transcript_path)?.transcript_path;
+  if (path) transcripts.set(key, path);
+  if (evs.some((e) => e.kind === "prompt")) refreshUsage(key);
+  if (evs.some((e) => e.kind === "stop")) setTimeout(() => refreshUsage(key), 2000);
+}
+
+async function refreshUsage(key: string) {
+  const path = transcripts.get(key);
+  if (!path) return;
+  try {
+    const rows = await api.agentUsage(path);
+    useStore.setState((s) => ({ usage: { ...s.usage, [key]: rows } }));
+  } catch {
+    /* not written yet */
+  }
 }
 
 async function pollHooks(key: string) {
@@ -499,7 +524,9 @@ export function applyHookEvents(key: string, events: HookEvent[]) {
   const h = hookState.get(key) ?? emptyTree();
   hookState.set(key, h);
   const now = Date.now();
-  const main = fold(h, events.flatMap((e) => normalize(agent, e as HookEvent & Record<string, unknown>)), now);
+  const evs = events.flatMap((e) => normalize(agent, e as HookEvent & Record<string, unknown>));
+  const main = fold(h, evs, now);
+  trackUsage(key, events, evs);
   useStore.setState((s) => ({ subagents: { ...s.subagents, [key]: [...h.nodes.values()] } }));
   if (!main || !exact) return;
   const prev = get().agentStatus[key];

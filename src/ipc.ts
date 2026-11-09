@@ -165,6 +165,17 @@ export interface HookEvent {
   tool_input?: { description?: string; subagent_type?: string };
   tool_response?: { agentId?: string; status?: string };
   notification_type?: string;
+  /** Claude Code: the session's JSONL, read for token usage. */
+  transcript_path?: string;
+}
+
+/** Tokens one model used in a Claude Code session (lib/usage prices them). */
+export interface UsageRow {
+  model: string;
+  input: number;
+  output: number;
+  cache_read: number;
+  cache_create: number;
 }
 
 export type PtyMessage = ArrayBuffer | { exit: number };
@@ -193,6 +204,7 @@ export const api = {
   agentRepoHooks: (agent: string, cwd: string, enable: boolean) => invoke<string>("agent_repo_hooks", { agent, cwd, enable }),
   agentEvents: (key: string) => invoke<HookEvent[]>("agent_events", { key }),
   agentEventsClear: (key: string) => invoke("agent_events_clear", { key }),
+  agentUsage: (path: string) => invoke<UsageRow[]>("agent_usage", { path }),
   listFonts: () => invoke<{ all: string[]; mono: string[] }>("list_fonts"),
   loadConfig: () => invoke<Config | null>("load_config"),
   saveConfig: (config: Config) => invoke("save_config", { config }),

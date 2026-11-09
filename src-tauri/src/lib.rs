@@ -168,6 +168,7 @@ pub fn run() {
             ai::ai_list_models,
             agent::agent_events,
             agent::agent_events_clear,
+            agent::agent_usage,
             agent::agent_setup,
             agent::agent_repo_hooks,
         ])
