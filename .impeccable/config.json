@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font",
+        "value": "material symbols outlined",
+        "createdAt": "2026-11-09T03:04:07.750Z",
+        "reason": "Claude: icon font for the Icon component (src/components/ui.tsx:7), not body typography"
+      }
+    ]
+  }
+}

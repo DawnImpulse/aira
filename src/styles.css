@@ -11,6 +11,7 @@
   --dim: #8d8d96;
   --faint: #5c5c65;
   --accent: #6aa8ff;
+  --on-accent: #06101f; /* white on #6aa8ff is 2.4:1 */
   --green: #3fcf6e;
   --red: #ff6b6b;
   --amber: #e6b450;
@@ -30,6 +31,7 @@
   --dim: #6b6b75;
   --faint: #9c9ca6;
   --accent: #2563eb;
+  --on-accent: #ffffff;
   --green: #1a9a4a;
   --red: #d93636;
   --amber: #a86b00;
@@ -176,7 +178,7 @@ textarea {
 .btn.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .btn.primary:hover:not(:disabled) {
   filter: brightness(1.08);

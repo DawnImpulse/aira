@@ -154,7 +154,7 @@ components:
     backgroundColor: "{colors.hover-graphite}"
   button-primary:
     backgroundColor: "{colors.signal-blue}"
-    textColor: "#ffffff"
+    textColor: "{colors.on-accent}"
     rounded: "{rounded.md}"
     padding: "0 10px"
     height: "28px"
