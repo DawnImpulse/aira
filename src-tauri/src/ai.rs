@@ -369,7 +369,7 @@ mod tests {
         assert!(req.starts_with("POST /v1/chat/completions "), "{req}");
         assert!(req.to_ascii_lowercase().contains("authorization: bearer sk-test"));
         assert!(req.contains(r#""model":"m1""#) && req.contains("the diff"));
-        assert!(req.to_ascii_lowercase().contains("user-agent: ide/"));
+        assert!(req.to_ascii_lowercase().contains("user-agent: aira/"));
     }
 
     #[tokio::test]
