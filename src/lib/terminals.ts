@@ -9,6 +9,7 @@ import { api, type HookEvent, type Project, type PtyMessage, type Script, type S
 import { dropTab, notify, openTerminalTab, projectById, scriptCwd, scriptsWindow, spaceOfPath, uid, updateConfig, useStore, type AgentStatus, type Term } from "../store";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { agentById, type Agent } from "./agents";
+import { popupMenu } from "./menu";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { emptyTree, fold, normalize, type TreeState } from "./agentEvents";
 
@@ -97,6 +98,12 @@ function xterm(key: string): XT {
   });
   const el = document.createElement("div");
   el.className = "xterm-host";
+  // xterm's own handler runs first: it selects the word under the cursor and focuses its hidden
+  // textarea with the selection, so native Copy/Paste act on the terminal.
+  el.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    popupMenu(["Copy", "Paste", "-", { text: "Select All", action: () => term.selectAll() }, { text: "Clear", action: () => term.clear() }]);
+  });
   const x: XT = { term, fit: fitAddon, el, opened: false, webgl: null };
   xts.set(key, x);
   return x;

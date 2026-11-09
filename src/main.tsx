@@ -6,6 +6,7 @@ import "./styles.css";
 import App from "./App";
 import { boot, notify } from "./store";
 import { installTooltips } from "./lib/tooltips";
+import { popupMenu } from "./lib/menu";
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 
@@ -20,12 +21,13 @@ if (!isTauri()) {
     </div>,
   );
 } else {
-  // No WebKit "Reload / Inspect Element" menu. Text fields, editor, terminal and selected text keep theirs.
+  // Never WebKit's "Reload / Inspect Element" menu. Monaco and xterm pop their own; text fields get
+  // native edit items; anywhere else offers Copy for whatever is selected.
   document.addEventListener("contextmenu", (e) => {
     const t = e.target as Element | null;
-    if (t?.closest("input, textarea, .monaco-editor, .xterm")) return;
-    if (window.getSelection()?.toString()) return;
+    if (t?.closest(".monaco-editor, .xterm")) return;
     e.preventDefault();
+    popupMenu(t?.closest("input, textarea") ? ["Cut", "Copy", "Paste", "-", "SelectAll"] : ["Copy"]);
   });
   installTooltips();
   boot().catch((e) => notify(`Startup failed: ${e}`));
