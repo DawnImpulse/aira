@@ -51,6 +51,14 @@ export interface AgentStatus {
   unseen?: boolean;
 }
 
+/** One agent event that was worth a banner (lib/terminals notifyAgent); listed in the status bar. */
+export interface Notice {
+  key: string;
+  title: string;
+  body: string;
+  at: number;
+}
+
 interface State {
   ready: boolean;
   config: Config;
@@ -60,6 +68,7 @@ interface State {
   agentStatus: Record<string, AgentStatus>; // term key → activity (kept out of `terms` so it never triggers saves)
   subagents: Record<string, SubAgentNode[]>; // term key → Claude subagent tree (from hooks)
   usage: Record<string, UsageRow[]>; // term key → tokens per model (from the Claude transcript)
+  notices: Notice[]; // newest first, capped at 50, not persisted
   mem: { sessions: Record<string, number>; app: number; procs?: Record<string, string[]> };
   dirty: Record<string, boolean>; // file path → unsaved edits
   dialog: Dialog;
@@ -105,6 +114,7 @@ export const useStore = create<State>(() => ({
   agentStatus: {},
   subagents: {},
   usage: {},
+  notices: [],
   mem: { sessions: {}, app: 0 },
   dirty: {},
   dialog: null,
@@ -281,6 +291,7 @@ function normalize(raw: Partial<Config> | null): Config {
 }
 
 let saveTimer: number | undefined;
+let badge = 0; // Dock badge count last sent
 export async function saveNow() {
   clearTimeout(saveTimer);
   const { config, terms } = get();
@@ -778,6 +789,14 @@ export async function boot() {
       saveTimer = window.setTimeout(saveNow, 400);
     }
     if (s.config.settings !== prev.config.settings) applySettings();
+    if (s.agentStatus !== prev.agentStatus) {
+      // Dock badge: agents that finished, asked, or exited while nobody was looking.
+      const n = Object.values(s.agentStatus).filter((a) => a.unseen).length;
+      if (n !== badge) {
+        badge = n;
+        getCurrentWindow().setBadgeCount(n || undefined).catch(() => {});
+      }
+    }
   });
 
   config.projects.forEach((p) => discover(p.id));
@@ -789,5 +808,6 @@ export async function boot() {
   });
   listen<string>("menu", (e) => onMenu(e.payload));
   listen("quit-requested", onQuitRequested);
+  listen<string>("notification-clicked", (e) => focusTerminal(e.payload));
 }
 

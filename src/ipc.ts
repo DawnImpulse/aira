@@ -205,6 +205,8 @@ export const api = {
   agentEvents: (key: string) => invoke<HookEvent[]>("agent_events", { key }),
   agentEventsClear: (key: string) => invoke("agent_events_clear", { key }),
   agentUsage: (path: string) => invoke<UsageRow[]>("agent_usage", { path }),
+  /** macOS banner; resolves after the banner is clicked or cleared, so don't await it. */
+  notifyAgent: (key: string, title: string, body: string) => invoke("notify_agent", { key, title, body }),
   listFonts: () => invoke<{ all: string[]; mono: string[] }>("list_fonts"),
   loadConfig: () => invoke<Config | null>("load_config"),
   saveConfig: (config: Config) => invoke("save_config", { config }),

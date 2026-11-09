@@ -13,7 +13,6 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 - [ ] Browser tab with screenshot, debugging and other options · ~TBD
 - [ ] Mac application deploy · ~TBD
 - [ ] Register the website with Google Search Console and Bing Webmaster Tools, submit the sitemap · ~TBD
-- [ ] Notification support · ~TBD
 
 ## Done
 
@@ -24,3 +23,4 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 - [x] Keyboard shortcuts info in Settings · v0.1.0 · 2026-11-09
 - [x] Fix the right-click context menu (no more WebKit menu; terminal Copy/Paste/Select All/Clear) · v0.1.0 · 2026-11-09
 - [x] Bar usage of AI agent: tokens and API-equivalent cost per Claude Code terminal (sidebar + Terminals popover) · v0.1.0 · 2026-11-09
+- [x] Notification support: click a banner to focus the terminal, Dock badge, status-bar bell with recent events ("Terminal" as sender is dev-only until an Aira.app is built) · v0.1.0 · 2026-11-09

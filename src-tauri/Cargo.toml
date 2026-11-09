@@ -31,7 +31,6 @@ tokio = { version = "1.53.1", features = ["process", "time", "sync", "macros", "
 nix = { version = "0.31.3", features = ["signal", "process"] }
 keyring = "4.2.0"
 reqwest = { version = "0.13.5", features = ["json"] }
-tauri-plugin-notification = "2"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
@@ -47,3 +46,4 @@ tempfile = "3.27.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-text = "22"
+mac-notification-sys = "0.6"

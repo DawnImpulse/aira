@@ -95,7 +95,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init())
         .manage(pty::Ptys::default())
         .manage(fs::Watch::default())
         .menu(menu)
@@ -123,6 +122,7 @@ pub fn run() {
                 .build()?;
             mem::start(app.handle().clone());
             agent::clear_all(app.handle());
+            agent::init_notifications(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -169,6 +169,7 @@ pub fn run() {
             agent::agent_events,
             agent::agent_events_clear,
             agent::agent_usage,
+            agent::notify_agent,
             agent::agent_setup,
             agent::agent_repo_hooks,
         ])

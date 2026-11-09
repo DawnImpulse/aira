@@ -7,7 +7,6 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
 import { api, type HookEvent, type Project, type PtyMessage, type Script, type Settings } from "../ipc";
 import { dropTab, notify, openTerminalTab, projectById, scriptCwd, scriptsWindow, spaceOfPath, uid, updateConfig, useStore, type AgentStatus, type Term } from "../store";
-import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { agentById, type Agent } from "./agents";
 import { popupMenu } from "./menu";
 import { ask, message } from "@tauri-apps/plugin-dialog";
@@ -390,28 +389,29 @@ const watching = (key: string) => document.hasFocus() && get().config.layout.act
 
 // ---------- agent notifications ----------
 
-let permission: Promise<boolean> | null = null;
 const lastNotified = new Map<string, number>();
 
 /**
- * macOS notification for an agent terminal, unless the user is already looking at it.
+ * macOS banner for an agent terminal, unless the user is already looking at it; the same event
+ * goes to the status-bar list and marks the terminal unseen (Dock badge, breathing space card).
  * Finish, bell and exit often fire together, so one per terminal per 5s (10s for the bell burst).
  */
-async function notifyAgent(key: string, what: string) {
+function notifyAgent(key: string, what: string) {
   const { terms, config } = get();
   const t = terms[key];
   if (!t?.agent || !config.settings.notifyAgents) return;
-  if (document.hasFocus() && config.layout.activeTab === `term:${key}`) return;
+  if (watching(key)) return;
   const now = Date.now();
   if (now - (lastNotified.get(key) ?? 0) < (what === "Needs your input" ? 10_000 : 5_000)) return;
   lastNotified.set(key, now);
-  permission ??= isPermissionGranted()
-    .then((ok) => ok || requestPermission().then((p) => p === "granted"))
-    .catch(() => false);
-  if (!(await permission)) return;
-  const name = t.renamed ? t.name : (agentById(t.agent)?.label ?? "Agent");
+  const title = t.renamed ? t.name : (agentById(t.agent)?.label ?? "Agent");
   const space = spaceOfPath(t.cwd);
-  sendNotification({ title: name, body: space ? `${what} · ${space.name}` : what });
+  const body = space ? `${what} · ${space.name}` : what;
+  api.notifyAgent(key, title, body).catch(() => {}); // resolves on click/clear, so never awaited
+  useStore.setState((s) => ({
+    notices: [{ key, title, body, at: now }, ...s.notices].slice(0, 50),
+    agentStatus: { ...s.agentStatus, [key]: { ...(s.agentStatus[key] ?? { state: "idle", since: now, everWorked: true }), unseen: true } },
+  }));
 }
 
 // ---------- Claude Code hooks: exact status + nested subagents ----------

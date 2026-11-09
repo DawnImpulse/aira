@@ -1331,6 +1331,24 @@ textarea {
   flex-shrink: 0;
   font-size: 11px;
 }
+
+/* ---------- status-bar notifications ---------- */
+.amber {
+  color: var(--amber);
+}
+.notices-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.notice-row.unseen {
+  color: var(--text);
+  font-weight: 600;
+}
+.notice-row .dim {
+  margin-left: auto;
+  flex-shrink: 0;
+}
 .working-label {
   color: var(--green);
 }

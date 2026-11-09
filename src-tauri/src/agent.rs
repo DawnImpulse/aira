@@ -5,7 +5,7 @@
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Writes the hook's stdin JSON to its own file (mktemp → write → mv, so readers only ever see
 /// complete `*.json` files). Prints nothing and always exits 0, so it can't influence Claude.
@@ -98,6 +98,50 @@ fn read_events(dir: &Path) -> Vec<Value> {
             v
         })
         .collect()
+}
+
+// ---------- macOS notifications with click-to-focus ----------
+
+/// Banners post as this app once LaunchServices knows the bundle id (a built .app exists, e.g. in
+/// /Applications). Until then the crate poses as Terminal, as the notification plugin did in dev.
+pub fn init_notifications(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    let _ = mac_notification_sys::set_application(&app.config().identifier);
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+}
+
+#[cfg(target_os = "macos")]
+static WAITERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Banner for an agent terminal. A click focuses the window and emits `notification-clicked` with the key.
+#[tauri::command]
+pub async fn notify_agent(app: AppHandle, key: String, title: String, body: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use mac_notification_sys::{Notification, NotificationResponse};
+        use std::sync::atomic::Ordering;
+        // ponytail: a waiter parks a thread until its banner is clicked or cleared; past 8, fire and forget.
+        let wait = WAITERS.fetch_add(1, Ordering::SeqCst) < 8;
+        let r = tauri::async_runtime::spawn_blocking(move || {
+            let r = Notification::new().title(&title).message(&body).wait_for_click(wait).send();
+            WAITERS.fetch_sub(1, Ordering::SeqCst);
+            r
+        })
+        .await
+        .map_err(err)?
+        .map_err(err)?;
+        if matches!(r, NotificationResponse::Click) {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+            let _ = app.emit("notification-clicked", key);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, key, title, body);
+    Ok(())
 }
 
 // ---------- token usage from the Claude Code transcript ----------
