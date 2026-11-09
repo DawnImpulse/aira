@@ -140,3 +140,18 @@ Each ships as its own commit, smallest first.
 5. `feat(notifications): click to focus, Dock badge, in-app list` — item 9
 
 Each commit moves its `TODO.md` line to Done (version + date). Plan saved to `plans/011-…` first; implementation-status section appended at the end.
+
+---
+
+## Implementation status (2026-11-09)
+
+Shipped in six commits on `aira-website`: `e45333a` (5), `945a824` (1), `945e02d` (11), `7a09afa` (10), `541e837` (stale user-agent test), `6c39964` (9).
+
+**Deviations from the plan**
+- Item 11: no `paste_text` Rust command and no `copyText` for selections. Native `Cut/Copy/Paste/SelectAll` items act on the focused field through the responder chain (same path as the Edit menu); xterm's own right-click handler leaves the selection in its hidden textarea, so native Copy/Paste reach the terminal. `MenuEntry` takes those four names as strings.
+- Item 9: no `set_application` fallback code — `mac-notification-sys` already poses as Terminal when the bundle id is unknown. `tauri-plugin-notification` removed (Rust + JS + capability). Unseen state stays on `agentStatus.unseen` (now also set for needs-input and exit); `notices` holds only `{ key, title, body, at }`. Waiter cap of 8 parked threads. Bonus: Claude `Notification` hooks count as "Needs input" only for `permission_prompt`, `idle_prompt`, `agent_needs_input`, `elicitation*`.
+- Item 10: usage re-read 2s after `stop` and on the next `prompt` (transcript lags hooks); Rust reads the file with a `"type":"assistant"` prefilter; `Intl.NumberFormat` compact for `48K`.
+
+**Verified**: `tsc`, `vite build`, `cargo test` (22 pass, incl. a new dedupe test for `read_usage`).
+
+**Not yet verified at runtime** (needs `bun tauri dev`): terminal right-click Copy/Paste round-trip, banner click focusing the terminal, Dock badge, bell popover, usage numbers vs `/cost`. Sender name "Aira" needs a built `Aira.app` registered with LaunchServices (`bun tauri build` once).
