@@ -115,6 +115,7 @@
               <tr><th scope="row"><kbd>⌘</kbd><kbd>,</kbd></th><td>Settings</td></tr>
               <tr><th scope="row"><kbd>⌘</kbd><kbd>O</kbd></th><td>Open a folder</td></tr>
               <tr><th scope="row"><kbd>⌘</kbd><kbd>T</kbd></th><td>New terminal</td></tr>
+              <tr><th scope="row"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>B</kbd></th><td>New browser tab</td></tr>
               <tr><th scope="row"><kbd>⌘</kbd><kbd>W</kbd></th><td>Close the current tab (never the window)</td></tr>
               <tr><th scope="row"><kbd>⌘</kbd><kbd>B</kbd></th><td>Show or hide the projects panel</td></tr>
               <tr><th scope="row"><kbd>⌥</kbd><kbd>⌘</kbd><kbd>B</kbd></th><td>Show or hide the Files and Git panel</td></tr>
@@ -144,6 +145,8 @@
           <li><b>Double-click a terminal's tab</b> to rename it. The same works in the status bar's Terminals list.</li>
           <li><b>Double-click a project's name</b> to rename it. A single click folds the project away.</li>
           <li><b>Middle-click a tab</b> to close it.</li>
+          <li><b>Hover the +</b> beside the tabs for a quick menu. <b>Click</b> it for every option: a terminal, a browser tab, each installed agent, and the space's dev servers and pinned links.</li>
+          <li>On a browser tab's new-tab page, <b>double-click a dev server</b> to rename it (it starts as its script's name), and pin links in the field at the bottom.</li>
           <li><b>Drag the edges</b> between panels to resize them.</li>
           <li>Space cards, scripts and git changes show their buttons when you hover them.</li>
         </ul>
@@ -155,6 +158,8 @@
               <tr><th scope="row">A tab</th><td><b>Rename…</b> (terminals), <b>Close</b>, <b>Close Others</b></td></tr>
               <tr><th scope="row">A file or folder</th><td><b>New File…</b>, <b>New Folder…</b>, <b>Add as Nested Space…</b> (folders), <b>Open</b> (files), <b>Open Terminal Here</b>, <b>Reveal in Finder</b>, <b>Copy Path</b></td></tr>
               <tr><th scope="row">A terminal</th><td><b>Copy</b>, <b>Paste</b>, <b>Select All</b>, <b>Clear</b></td></tr>
+              <tr><th scope="row">A dev server card</th><td><b>Open</b>, <b>Open in System Browser</b>, <b>Rename…</b></td></tr>
+              <tr><th scope="row">A pinned link</th><td><b>Open</b>, <b>Open in System Browser</b>, <b>Unpin</b></td></tr>
               <tr><th scope="row">A text field</th><td><b>Cut</b>, <b>Copy</b>, <b>Paste</b>, <b>Select All</b></td></tr>
             </tbody>
           </table>
@@ -298,6 +303,7 @@
               <tr><th scope="row">Editor &amp; terminal font</th><td>Any installed font; unknown names fall back to SF Mono</td><td>SF Mono</td></tr>
               <tr><th scope="row">Size</th><td>9 to 28</td><td>13</td></tr>
               <tr><th scope="row">Agent notifications</th><td>When a coding agent finishes, needs input or exits, and you aren't looking at it</td><td>On</td></tr>
+              <tr><th scope="row">Coding agents</th><td>Show or hide each installed agent in the + menu; agents that aren't installed stay hidden</td><td>Every installed agent shown</td></tr>
               <tr><th scope="row">GPU (WebGL) terminal rendering</th><td>Faster for heavy output; turn off if terminals render blank</td><td>Off</td></tr>
               <tr><th scope="row">AI (commit messages)</th><td>Provider, model, server address and API key, depending on the provider</td><td>Anthropic</td></tr>
             </tbody>

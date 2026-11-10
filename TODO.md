@@ -7,10 +7,11 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 
 ## Open
 
+- [ ] Add a "sleep" option to a space (suspend it) · ~TBD
+- [ ] Browser tab: import logins (cookies) from Chrome/Arc/Brave/Edge/Dia for quick sign-in · ~TBD
 - [ ] Small workspaces for branching and doing work · ~TBD
 - [ ] Connect the website's feedback form: set `action` on the form in `docs/feedback.html` · ~TBD
 - [ ] Check the website's videos in Safari and on a phone once it's live · ~TBD
-- [ ] Browser tab with screenshot, debugging and other options · ~TBD
 - [ ] Mac application deploy · ~TBD
 - [ ] Register the website with Google Search Console and Bing Webmaster Tools, submit the sitemap · ~TBD
 
@@ -24,3 +25,6 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 - [x] Fix the right-click context menu (no more WebKit menu; terminal Copy/Paste/Select All/Clear) · v0.1.0 · 2026-11-09
 - [x] Bar usage of AI agent: tokens and API-equivalent cost per Claude Code terminal (sidebar + Terminals popover) · v0.1.0 · 2026-11-09
 - [x] Notification support: click a banner to focus the terminal, Dock badge, status-bar bell with recent events ("Terminal" as sender is dev-only until an Aira.app is built) · v0.1.0 · 2026-11-09
+- [x] Browser tab: native webview tab that loads any site (address bar, back/forward/reload, zoom, devtools, real loading bar; `⇧⌘B`). New-tab page lists the space's dev servers (named after their script, renamable), per-space pinned links and recent pages, with real favicons. Cookie import from other browsers deferred. · v0.1.0 · 2026-11-10
+- [x] Launcher: hover `+` for a quick menu, click for a full "Open…" tab (terminal, browser, installed agents, dev servers, pins); the empty state shows the same page · v0.1.0 · 2026-11-10
+- [x] Settings → Coding agents: only installed agents in the `+` menu, each can be hidden · v0.1.0 · 2026-11-10
