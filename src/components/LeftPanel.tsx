@@ -95,7 +95,7 @@ function ProjectSection({ project: p }: { project: Project }) {
     <section className={cx("project", p.collapsed && "collapsed")} style={projectStyle(p)}>
       <div className="project-head" onClick={onHeadClick} title={p.collapsed ? "Click to expand" : "Click to collapse"}>
         <IconButton icon={p.collapsed ? "chevron_right" : "expand_more"} title={p.collapsed ? "Expand" : "Collapse"} onClick={stop(() => toggleCollapsed(p.id))} />
-        <ProjectIcon icon={p.icon} color={p.color ?? "var(--accent)"} size={18} />
+        <ProjectIcon icon={p.icon} color={p.color ?? "var(--accent)"} size={15} />
         {editing ? (
           <input
             className="inline-input wide"

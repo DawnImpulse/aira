@@ -1523,7 +1523,7 @@ textarea {
   pointer-events: none;
 }
 .project-head {
-  height: 34px;
+  height: 28px;
   padding-left: 2px;
   border-radius: 8px;
 }
@@ -1531,16 +1531,16 @@ textarea {
   padding-bottom: 0;
 }
 .project-name {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 650;
   color: var(--project-color);
 }
 .project-body {
   padding: 2px 6px 0 6px;
 }
 .space-card .card-title {
-  font-weight: 650;
-  font-size: 13.5px;
+  font-weight: 600;
+  font-size: 12px;
 }
 .space-card .card-sub {
   padding-left: 0;
@@ -1984,4 +1984,246 @@ textarea {
   width: 13px;
   height: 13px;
   flex-shrink: 0;
+}
+
+/* ---------- embedded browser tab (native webview) ---------- */
+.browser-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.browser-bar {
+  gap: 2px;
+  padding: 0 6px;
+}
+.browser-addr {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  margin: 0 6px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+}
+.browser-addr:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.browser-zoom {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.browser-loadbar {
+  height: 2px;
+  flex-shrink: 0;
+  background: var(--accent);
+  transform-origin: left;
+  transition: opacity 0.2s;
+  opacity: 0;
+}
+.browser-loadbar[data-on="true"] {
+  opacity: 1;
+  animation: browser-load 1.2s ease-in-out infinite;
+}
+@keyframes browser-load {
+  0% { transform: scaleX(0.05); }
+  50% { transform: scaleX(0.7); }
+  100% { transform: scaleX(1); }
+}
+/* The native webview floats over this region; keep it plain. */
+.browser-body {
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+}
+
+/* ---------- browser new-tab (start) page ---------- */
+.browser-body {
+  position: relative;
+}
+.browser-start {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  background: var(--bg);
+}
+.start-head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 12px;
+}
+.start-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+.start-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  max-width: 100%;
+}
+.start-tile:hover {
+  border-color: var(--border-strong);
+}
+.start-title {
+  font-size: 13px;
+  font-weight: 550;
+  max-width: 100%;
+}
+.start-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+}
+.favicon {
+  border-radius: 5px;
+  object-fit: contain;
+}
+.dot.live {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  flex-shrink: 0;
+}
+.start-tile.pin {
+  position: relative;
+  padding: 0;
+}
+.start-open {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  cursor: pointer;
+  min-width: 0;
+}
+.pin-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+}
+.start-tile.pin:hover .pin-x {
+  opacity: 1;
+}
+.start-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.start-add .inline-input {
+  flex: 1;
+}
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* ---------- launcher (new… page / tab) ---------- */
+.launcher {
+  width: 100%;
+  max-width: 680px;
+  margin: 24px auto;
+  padding: 0 24px;
+  box-sizing: border-box;
+}
+.launcher-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+.launch-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 22px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.launch-tile:hover {
+  border-color: var(--border-strong);
+  background: var(--elev);
+}
+
+.launcher section { margin-top: 28px; }
+
+/* Launcher: centered block (same in the empty state and the launcher tab), content left-aligned. */
+.launcher {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  text-align: left;
+}
+.launcher section {
+  margin-top: 0;
+}
+
+.launcher-title {
+  margin: 0;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+}
+.launcher-hint {
+  margin: -16px 0 0;
+  text-align: center;
+}
+
+/* Pin field: a single box (the inner input is borderless) and a comfortable height. */
+.start-add {
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 10px;
+}
+.start-add:focus-within {
+  border-color: var(--accent);
+}
+.start-add .inline-input,
+.start-add .inline-input:focus {
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  height: 40px;
+  padding: 0;
+  font-size: 13px;
 }

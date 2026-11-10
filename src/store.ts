@@ -75,6 +75,7 @@ interface State {
   restore: string[]; // script ids running at last quit
   ports: PortInfo[]; // listening TCP ports (lib/ports)
   toast: string | null;
+  overlays: number; // open popovers/menus; the embedded browser webview hides while any are up
 }
 
 /** Exited non-zero on its own (a user Stop is not a failure). */
@@ -83,6 +84,7 @@ export const isFailed = (t?: Term) => t?.status === "exited" && t.exitCode !== 0
 const DEFAULT_CONFIG: Config = {
   projects: [],
   scripts: {},
+  browserHistory: [],
   settings: {
     theme: "dark",
     uiFont: "System",
@@ -90,6 +92,7 @@ const DEFAULT_CONFIG: Config = {
     fontSize: 13,
     terminalWebgl: false,
     notifyAgents: true,
+    hiddenAgents: [],
     ai: { provider: "anthropic", models: {}, baseUrls: {}, keySaved: {}, acknowledged: {} },
   },
   layout: {
@@ -121,7 +124,11 @@ export const useStore = create<State>(() => ({
   restore: [],
   ports: [],
   toast: null,
+  overlays: 0,
 }));
+
+/** Floating UI (popovers, menus) bumps this so the native browser webview hides under it. */
+export const setOverlay = (delta: number) => set((s) => ({ overlays: Math.max(0, s.overlays + delta) }));
 
 const get = useStore.getState;
 const set = useStore.setState;
@@ -249,6 +256,7 @@ function normalize(raw: Partial<Config> | null): Config {
   const c: Config = {
     projects: raw?.projects ?? [],
     scripts: raw?.scripts ?? {},
+    browserHistory: (raw?.browserHistory ?? []).slice(0, 100),
     settings: { ...d.settings, ...raw?.settings, ai: migrateAi(raw?.settings?.ai) },
     layout: { ...d.layout, ...raw?.layout },
   };
@@ -665,6 +673,78 @@ export function pinTab(id: string) {
   });
 }
 
+/** Tracks the browser tab's current URL (for its title and session restore). */
+export function setBrowserUrl(id: string, url: string) {
+  updateConfig((c) => {
+    const t = c.layout.tabs.find((x) => x.id === id);
+    if (t?.kind === "browser") t.url = url;
+  });
+}
+
+/** Records a visited page in the browser's new-tab history (newest first, deduped, capped). */
+export function recordBrowserHistory(url: string) {
+  if (!/^https?:/i.test(url)) return;
+  updateConfig((c) => {
+    c.browserHistory = [{ url, ts: Date.now() }, ...(c.browserHistory ?? []).filter((h) => h.url !== url)].slice(0, 100);
+  });
+}
+
+function findSpace(c: Config, spaceId: string) {
+  return c.projects.flatMap((p) => p.spaces).find((s) => s.id === spaceId);
+}
+
+/** Per-workspace pinned quick links on the browser new-tab page. */
+export function addPin(spaceId: string, url: string, title?: string) {
+  updateConfig((c) => {
+    const s = findSpace(c, spaceId);
+    if (!s) return;
+    s.pins ??= [];
+    if (!s.pins.some((p) => p.url === url)) s.pins.push({ url, title });
+  });
+}
+export function removePin(spaceId: string, url: string) {
+  updateConfig((c) => {
+    const s = findSpace(c, spaceId);
+    if (s?.pins) s.pins = s.pins.filter((p) => p.url !== url);
+  });
+}
+
+/** Custom name for a detected dev server on `port` (empty clears it, back to the script default). */
+export function renameServer(spaceId: string, port: number, name: string) {
+  updateConfig((c) => {
+    const s = findSpace(c, spaceId);
+    if (!s) return;
+    s.serverNames ??= {};
+    const v = name.trim();
+    if (v) s.serverNames[String(port)] = v;
+    else delete s.serverNames[String(port)];
+  });
+}
+
+/** Opens (or reuses) the launcher tab: a full page with all "new…" options. */
+export function openLauncherTab() {
+  updateConfig((c) => {
+    const existing = c.layout.tabs.find((t) => t.kind === "launcher");
+    if (existing) {
+      c.layout.activeTab = existing.id;
+      return;
+    }
+    const id = `launcher:${crypto.randomUUID().slice(0, 8)}`;
+    insertTab(c, { id, kind: "launcher" });
+    c.layout.activeTab = id;
+  });
+}
+
+/** Opens a new embedded-browser tab. Starts on the new-tab page (workspace servers, pins, history);
+ * the native webview is created by BrowserView once a page is opened. */
+export function openBrowserTab(url = "about:blank") {
+  const id = `browser:${crypto.randomUUID().slice(0, 8)}`;
+  updateConfig((c) => {
+    insertTab(c, { id, kind: "browser", url });
+    c.layout.activeTab = id;
+  });
+}
+
 /** Diffs share one tab slot, like a preview. */
 /** `head`: HEAD ↔ working tree (commit panel); otherwise HEAD ↔ index (staged) or index ↔ working tree. */
 export function openDiff(repo: string, f: FileEntry, staged: boolean, head = false) {
@@ -684,6 +764,8 @@ export async function closeTab(id: string | null) {
     if (get().dirty[tab.path] && !(await ask(`Discard unsaved changes to ${basename(tab.path)}?`, { kind: "warning", okLabel: "Discard" }))) return;
     disposeModel(tab.path);
   }
+  // The embedded browser webview is destroyed with its tab.
+  if (tab.kind === "browser") api.browserClose(tab.id).catch(() => {});
   // Shells die with their tab; a script can keep running in the background (reopen from the sidebar).
   if (tab.kind === "terminal") {
     if (get().terms[tab.key]?.scriptId) {
@@ -769,7 +851,8 @@ function onMenu(id: string) {
   else if (id === "new-terminal") {
     const p = activeProject();
     if (p) newTerminal(p.id, { cwd: activeSpace()?.dir });
-  } else if (id === "close-tab") closeTab(config.layout.activeTab);
+  } else if (id === "new-browser") openBrowserTab();
+  else if (id === "close-tab") closeTab(config.layout.activeTab);
   else if (id === "toggle-left") togglePanel(panelApi.left);
   else if (id === "toggle-right") togglePanel(panelApi.right);
 }

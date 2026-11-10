@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "Capability for the app webview. Scoped to the \"main\" webview (not the window) so the embedded Browser tab's child webviews, which load arbitrary sites, inherit no permissions and cannot reach Tauri IPC.",
+  "webviews": ["main"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

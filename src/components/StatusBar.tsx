@@ -4,7 +4,7 @@ import { ago, formatBytes, isFailed, focusTerminal, projectById, repoOf, selectA
 import { removeTerm, renameTerm, stop as stopTerm } from "../lib/terminals";
 import { expectedPorts, freePort, projectOfPort, refreshPorts, termOfPort, type Expected } from "../lib/ports";
 import { usageLabel, usageTitle } from "../lib/usage";
-import { AgentIcon, cx, Icon, IconButton, ProjectIcon, stop } from "./ui";
+import { AgentIcon, cx, Icon, IconButton, ProjectIcon, stop, useOverlay } from "./ui";
 
 export function StatusBar() {
   const project = useStore((s) => s.config.projects.find((p) => p.id === s.config.layout.activeProjectId));
@@ -18,6 +18,7 @@ export function StatusBar() {
   const [open, setOpen] = useState(false);
   const [portsOpen, setPortsOpen] = useState(false);
   const [noticesOpen, setNoticesOpen] = useState(false);
+  useOverlay(open || portsOpen || noticesOpen);
   const unseen = useStore((s) => Object.values(s.agentStatus).filter((a) => a.unseen).length);
   const ports = useStore((s) => s.ports);
   const ours = ports.filter((p) => projectOfPort(p)).length;

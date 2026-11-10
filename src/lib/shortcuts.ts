@@ -5,6 +5,7 @@
 export const SHORTCUTS: { keys: string; label: string }[] = [
   { keys: "⌘O", label: "Open folder" },
   { keys: "⌘T", label: "New terminal in the active space" },
+  { keys: "⇧⌘B", label: "New browser tab" },
   { keys: "⌘W", label: "Close tab" },
   { keys: "⌘B", label: "Toggle Projects panel" },
   { keys: "⌘,", label: "Settings" },

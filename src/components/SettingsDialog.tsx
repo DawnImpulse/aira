@@ -2,9 +2,9 @@ import { Fragment, useEffect, useState } from "react";
 import { api, type Settings } from "../ipc";
 import { notify, updateConfig, useStore } from "../store";
 import { AI_PROVIDERS, aiCfg, aiProvider } from "../lib/aiProviders";
-import { hasBinary } from "../lib/agents";
+import { AGENTS, availableAgents, hasBinary } from "../lib/agents";
 import { SHORTCUTS } from "../lib/shortcuts";
-import { cx, Icon, Modal } from "./ui";
+import { AgentIcon, cx, Icon, Modal } from "./ui";
 
 // Fallbacks if the installed-font lookup fails (non-macOS or CoreText error).
 const UI_FONTS = ["Inter", "Helvetica Neue", "Helvetica", "Avenir Next", "IBM Plex Sans", "Geist", "Roboto", "Open Sans", "Lato", "Source Sans 3", "Nunito", "Manrope", "DM Sans"];
@@ -22,10 +22,19 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const p = aiProvider(s.ai.provider);
   const saved = !!s.ai.keySaved[p.id];
   const [fonts, setFonts] = useState({ all: UI_FONTS, mono: MONO_FONTS });
+  const [installedAgents, setInstalledAgents] = useState<Set<string> | null>(null);
   useEffect(() => {
     installedFonts ??= api.listFonts().catch(() => ({ all: [], mono: [] }));
     installedFonts.then((f) => f.all.length && setFonts(f));
+    availableAgents().then(setInstalledAgents);
   }, []);
+  const toggleAgent = (id: string, show: boolean) =>
+    upd((x) => {
+      const set = new Set(x.hiddenAgents);
+      if (show) set.delete(id);
+      else set.add(id);
+      x.hiddenAgents = [...set];
+    });
 
   useEffect(() => {
     setModels([]);
@@ -99,6 +108,27 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           <input type="checkbox" checked={s.terminalWebgl} onChange={(e) => upd((x) => void (x.terminalWebgl = e.target.checked))} />
           <span>GPU (WebGL) terminal rendering – faster for heavy output; turn off if terminals render blank.</span>
         </label>
+
+        <div className="section-title">Coding agents</div>
+        <small className="dim">The “+” menu shows installed agents. Hide any you don’t use; enable others once their CLI is installed.</small>
+        <div className="agent-list">
+          {AGENTS.map((a) => {
+            const inst = installedAgents?.has(a.id) ?? false;
+            const shown = !s.hiddenAgents.includes(a.id);
+            return (
+              <label key={a.id} className={cx("agent-opt", !inst && "off")} title={inst ? a.command : `\`${a.bin}\` not found on PATH`}>
+                <AgentIcon agent={a.id} size={16} />
+                <span className="ellipsis">{a.label}</span>
+                {!inst && installedAgents !== null && (
+                  <span className="dim small">
+                    install <code>{a.bin}</code>
+                  </span>
+                )}
+                <input type="checkbox" disabled={!inst} checked={inst && shown} onChange={(e) => toggleAgent(a.id, e.target.checked)} />
+              </label>
+            );
+          })}
+        </div>
 
         <div className="section-title">Keyboard shortcuts</div>
         <dl className="shortcuts">

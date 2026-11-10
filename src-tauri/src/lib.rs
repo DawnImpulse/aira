@@ -1,5 +1,6 @@
 mod agent;
 mod ai;
+mod browser;
 mod env;
 mod fs;
 mod git;
@@ -40,6 +41,7 @@ fn menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                 &[
                     &item("open-folder", "Open Folder…", "CmdOrCtrl+O")?,
                     &item("new-terminal", "New Terminal", "CmdOrCtrl+T")?,
+                    &item("new-browser", "New Browser Tab", "CmdOrCtrl+Shift+B")?,
                     &sep()?,
                     // Cmd+W closes a tab, never the window (that would kill every dev server).
                     &item("close-tab", "Close Tab", "CmdOrCtrl+W")?,
@@ -97,6 +99,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(pty::Ptys::default())
         .manage(fs::Watch::default())
+        .manage(browser::Browsers::default())
         .menu(menu)
         .on_menu_event(|app, event| {
             let _ = match event.id().as_ref() {
@@ -172,6 +175,15 @@ pub fn run() {
             agent::notify_agent,
             agent::agent_setup,
             agent::agent_repo_hooks,
+            browser::browser_open,
+            browser::browser_bounds,
+            browser::browser_navigate,
+            browser::browser_nav_action,
+            browser::browser_show,
+            browser::browser_close,
+            browser::browser_devtools,
+            browser::browser_zoom,
+            browser::browser_favicon,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

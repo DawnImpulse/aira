@@ -32,6 +32,20 @@ export interface Space {
   dir: string;
   /** Starred = "active": listed in the cross-project Spaces view. */
   starred?: boolean;
+  /** Per-workspace pinned quick links, shown on the browser new-tab page. */
+  pins?: BrowserPin[];
+  /** Custom names for detected dev servers, keyed by port (default is the owning script's name). */
+  serverNames?: Record<string, string>;
+}
+
+export interface BrowserPin {
+  url: string;
+  title?: string;
+}
+
+export interface BrowserHistoryEntry {
+  url: string;
+  ts: number;
 }
 
 /** Material symbol name, a single emoji, or an absolute path to a png/svg inside the project. */
@@ -62,6 +76,8 @@ export interface Settings {
   terminalWebgl: boolean;
   /** macOS notifications when an agent finishes, needs input, or exits. */
   notifyAgents: boolean;
+  /** Coding agents hidden from the "+" launcher (by id). Default: show only installed ones. */
+  hiddenAgents: string[];
   /** Per-provider model and base URL; keySaved records which providers have a Keychain key (no prompt just to check). */
   ai: {
     provider: string;
@@ -88,7 +104,9 @@ export interface TermSnapshot {
 export type Tab =
   | { id: string; kind: "terminal"; key: string }
   | { id: string; kind: "file"; path: string; pinned: boolean }
-  | { id: string; kind: "diff"; repo: string; path: string; orig: string | null; staged: boolean; head?: boolean };
+  | { id: string; kind: "diff"; repo: string; path: string; orig: string | null; staged: boolean; head?: boolean }
+  | { id: string; kind: "browser"; url: string }
+  | { id: string; kind: "launcher" };
 
 /** A space's own main tabs and right panel choice. */
 export interface SpaceView {
@@ -101,6 +119,8 @@ export interface Config {
   projects: Project[];
   scripts: Record<string, Script>;
   settings: Settings;
+  /** Embedded-browser visit history (newest first), for the new-tab page. */
+  browserHistory: BrowserHistoryEntry[];
   layout: SpaceView & {
     activeProjectId: string | null;
     terms: TermSnapshot[];
@@ -239,4 +259,17 @@ export const api = {
   aiCommitMessage: (repo: string, excludes: string[], cfg: AiCfg, paths?: string[]) =>
     invoke<string>("ai_commit_message", { repo, excludes, cfg, paths: paths ?? null }),
   aiListModels: (cfg: AiCfg) => invoke<string[]>("ai_list_models", { cfg }),
+
+  // Embedded browser: a native child webview the frontend positions over the Browser tab's body.
+  browserOpen: (a: { id: string; url: string; x: number; y: number; w: number; h: number; userAgent?: string }) =>
+    invoke("browser_open", a),
+  browserBounds: (id: string, x: number, y: number, w: number, h: number) => invoke("browser_bounds", { id, x, y, w, h }),
+  browserNavigate: (id: string, url: string) => invoke("browser_navigate", { id, url }),
+  browserNavAction: (id: string, action: "back" | "forward" | "reload") => invoke("browser_nav_action", { id, action }),
+  browserShow: (id: string, visible: boolean) => invoke("browser_show", { id, visible }),
+  browserClose: (id: string) => invoke("browser_close", { id }),
+  browserDevtools: (id: string) => invoke("browser_devtools", { id }),
+  browserZoom: (id: string, factor: number) => invoke("browser_zoom", { id, factor }),
+  /** Site favicon as a data URL (page's <link rel=icon>, else /favicon.ico), or null. */
+  browserFavicon: (url: string) => invoke<string | null>("browser_favicon", { url }),
 };
