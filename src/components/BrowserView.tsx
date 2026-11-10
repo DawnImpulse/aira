@@ -479,7 +479,8 @@ function LoginsPopover({ host, onDone, onClose }: { host: string | null; onDone:
  * image path into an attachment; no Enter, the user writes the prompt. */
 function sendToAgent(t: Term, text: string, png: string) {
   const paste = (s: string) => `\x1b[200~${s}\x1b[201~`;
-  api.ptyWrite(t.sessionId!, paste(text + " ") + paste(png) + " ").catch((e) => notify(`Send failed: ${e}`));
+  // Spaces escaped like a file dragged into a terminal (captures live under "Application Support").
+  api.ptyWrite(t.sessionId!, paste(text + " ") + paste(png.replace(/ /g, "\\ ")) + " ").catch((e) => notify(`Send failed: ${e}`));
   openTerminalTab(t.key);
 }
 
