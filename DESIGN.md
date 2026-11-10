@@ -76,6 +76,12 @@ typography:
     fontWeight: 620
     lineHeight: 1.04
     letterSpacing: "-0.02em"
+  site-section:
+    fontFamily: "Funnel Display, Funnel Sans, -apple-system, sans-serif"
+    fontSize: "clamp(1.9rem, 1.4rem + 1.6vw, 2.5rem)"
+    fontWeight: 620
+    lineHeight: 1.04
+    letterSpacing: "-0.02em"
   site-title:
     fontFamily: "Funnel Display, Funnel Sans, -apple-system, sans-serif"
     fontSize: "1.375rem"
@@ -303,7 +309,7 @@ A near-black neutral board, one cool accent for action, three status signals, an
 - **Mono** (400, 13px default): editor, diff, terminals and inline paths; size follows the user's setting.
 
 The website (`docs/`) is a separate brand surface with three faces, all self-hosted variable Latin subsets (`docs/fonts/`, SIL OFL) that never appear in the app:
-- **Funnel Display** for headings: Display (640, 40 to 92px, −0.03em, centered on the intro stage), Site Finale and Site Page Title (620, 42 to 76px), Site Headline (620, 34 to 56px, −0.02em), Site Title (600, 22px).
+- **Funnel Display** for headings: Display (640, 40 to 92px, −0.03em, centered on the intro stage), Site Finale and Site Page Title (620, 42 to 76px), Site Headline (620, 34 to 56px, −0.02em), Site Section (620, 30 to 40px, the guide's many section headings), Site Title (600, 22px).
 - **Funnel Sans**, its text companion, for everything read: Site Lead (18 to 21px), Site Body (16 to 17px, line-height 1.65), Site Small (14px), buttons and labels at 500 to 650.
 - **Martian Mono** at 87.5% width for the technical voice only: code, keys, the stage footnote, labels such as "On this page", all at 13px (its large x-height reads like 14 to 15px of a normal mono).
 
