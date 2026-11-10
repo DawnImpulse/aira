@@ -249,6 +249,7 @@
         </div>
         <ul class="plain">
           <li>Statuses: <b>Working</b>, <b>Needs input</b>, <b>Done</b>, <b>Idle</b>, <b>Exited</b> and <b>Not running</b>.</li>
+          <li>Interrupt an agent with <kbd>⌃</kbd><kbd>C</kbd> or <kbd>esc</kbd> and it shows <b>Done</b> once it goes quiet.</li>
           <li>A hook file is only added after you choose <b>Enable</b> when Aira asks. It's listed in <code>.git/info/exclude</code>, so it's never committed, and it does nothing unless the agent was started from Aira. If a file with that name already exists, Aira leaves it alone and falls back to terminal activity. Remove the files from the project's settings.</li>
           <li>Codex asks you once to trust its hook.</li>
           <li>With notifications on, macOS tells you when an agent finishes, needs input or exits, as long as you aren't looking at it. Click the banner to jump to that terminal. The Dock icon counts agents you haven't seen yet, and the bell in the status bar lists recent events.</li>
