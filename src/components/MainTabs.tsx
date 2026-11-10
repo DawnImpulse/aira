@@ -1,17 +1,33 @@
 import { useEffect, useRef, useState } from "react";
 import type { Tab } from "../ipc";
-import { activateTab, basename, closeTab, formatBytes, isFailed, isUnder, notify, openFolders, pinTab, selectActiveSpace, useStore } from "../store";
+import { activateTab, basename, closeTab, formatBytes, isFailed, isUnder, moveTab, notify, openBrowserTab, openLauncherTab, pinTab, selectActiveSpace, useStore, wakeSpace } from "../store";
 import { attach, newTerminal, renameTerm, restart, runScript, startSession, stop as stopTerm } from "../lib/terminals";
 import { AGENTS, availableAgents, type Agent } from "../lib/agents";
 import { fileIconUrl } from "../lib/icons";
 import { DiffView, FileView } from "./Editors";
-import { AgentIcon, cx, Icon, IconButton, Spinner, stop } from "./ui";
+import { BrowserView, Favicon, PinInput, RecentLinks, WorkspaceLinks } from "./BrowserView";
+import { AgentIcon, cx, Icon, IconButton, Spinner, stop, useOverlay } from "./ui";
 import { popupMenu } from "../lib/menu";
 
 export function MainTabs() {
   const tabs = useStore((s) => s.config.layout.tabs);
   const active = useStore((s) => s.config.layout.activeTab);
   const current = tabs.find((t) => t.id === active);
+  const space = useStore(selectActiveSpace);
+  const projectId = useStore((s) => s.config.layout.activeProjectId);
+  if (space?.asleep && projectId)
+    return (
+      <div className="main">
+        <div className="welcome">
+          <Icon name="bedtime" size={32} className="dim" />
+          <h2>{space.name} is asleep</h2>
+          <p className="dim">Its terminals and browser pages are stopped. Tabs are kept.</p>
+          <button className="btn primary" onClick={() => wakeSpace(projectId, space.id)}>
+            <Icon name="wb_sunny" /> Wake
+          </button>
+        </div>
+      </div>
+    );
   return (
     <div className="main">
       <div className="tabbar-wrap">
@@ -28,11 +44,25 @@ export function MainTabs() {
         {current?.kind === "terminal" && <TerminalView key={current.key} termKey={current.key} />}
         {current?.kind === "file" && <FileView key={current.path} path={current.path} tabId={current.id} />}
         {current?.kind === "diff" && <DiffView key={current.id} tab={current} />}
+        {current?.kind === "browser" && <BrowserView key={current.id} tab={current} />}
+        {current?.kind === "launcher" && (
+          <div className="welcome">
+            <Launcher tabId={current.id} />
+          </div>
+        )}
         {!current && <Welcome />}
       </div>
     </div>
   );
 }
+
+const hostname = (url: string): string | null => {
+  try {
+    return new URL(url).hostname || null;
+  } catch {
+    return null;
+  }
+};
 
 /** Closes every tab except `keep` (dirty files still ask first). */
 async function closeOthers(keep: string) {
@@ -47,13 +77,53 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
   const [editing, setEditing] = useState(false);
   const preview = tab.kind === "file" && !tab.pinned;
   const title =
-    tab.kind === "terminal" ? (term?.name ?? "Terminal") : tab.kind === "file" ? basename(tab.path) : `${basename(tab.path)} (${tab.head ? "changes" : tab.staged ? "staged" : "working tree"})`;
+    tab.kind === "terminal"
+      ? (term?.name ?? "Terminal")
+      : tab.kind === "file"
+        ? basename(tab.path)
+        : tab.kind === "browser"
+          ? (hostname(tab.url) ?? "New Tab")
+          : tab.kind === "launcher"
+            ? "New…"
+            : `${basename(tab.path)} (${tab.head ? "changes" : tab.staged ? "staged" : "working tree"})`;
+
+  // Drag to reorder (pointer events: Tauri's native file-drop handler can swallow HTML5 drag events).
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0 || (e.target as HTMLElement).closest(".tab-close, input")) return;
+    const startX = e.clientX;
+    let dragging = false;
+    const move = (ev: PointerEvent) => {
+      if (ev.buttons === 0) return up(); // released somewhere we didn't hear (e.g. over the browser webview)
+      if (!dragging && Math.abs(ev.clientX - startX) < 5) return;
+      dragging = true;
+      document.body.classList.add("tab-dragging");
+      const over = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest<HTMLElement>("[data-tab-id]");
+      const overId = over?.dataset.tabId;
+      if (!over || !overId || overId === tab.id) return;
+      // Only swap once the pointer passes the neighbour's middle, so unequal widths don't jitter.
+      const tabs = useStore.getState().config.layout.tabs;
+      const from = tabs.findIndex((t) => t.id === tab.id);
+      const to = tabs.findIndex((t) => t.id === overId);
+      const r = over.getBoundingClientRect();
+      const mid = r.left + r.width / 2;
+      if ((to > from && ev.clientX > mid) || (to < from && ev.clientX < mid)) moveTab(tab.id, overId);
+    };
+    function up() {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.classList.remove("tab-dragging");
+    }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
 
   return (
     <div
       role="tab"
       aria-selected={active}
+      data-tab-id={tab.id}
       className={cx("tab", active && "active", preview && "preview")}
+      onPointerDown={onPointerDown}
       onClick={() => activateTab(tab.id)}
       onAuxClick={(e) => e.button === 1 && closeTab(tab.id)}
       onContextMenu={(e) => {
@@ -65,7 +135,7 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
         ]);
       }}
       onDoubleClick={() => (tab.kind === "terminal" ? setEditing(true) : pinTab(tab.id))}
-      title={tab.kind === "terminal" ? term?.cwd : tab.path}
+      title={tab.kind === "terminal" ? term?.cwd : tab.kind === "browser" ? tab.url : tab.kind === "file" ? tab.path : undefined}
     >
       {tab.kind === "terminal" &&
         (term?.agent ? (
@@ -75,6 +145,8 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
         ))}
       {tab.kind === "file" && <img className="file-icon" src={fileIconUrl(tab.path)} alt="" />}
       {tab.kind === "diff" && <Icon name="difference" size={14} className="accent" />}
+      {tab.kind === "browser" && <Favicon url={tab.url} size={14} />}
+      {tab.kind === "launcher" && <Icon name="add" size={14} className="dim" />}
       {editing && term ? (
         <input
           className="inline-input"
@@ -165,22 +237,63 @@ function RestoreBanner() {
 }
 
 function Welcome() {
-  const hasProjects = useStore((s) => s.config.projects.length > 0);
   return (
     <div className="welcome">
-      <Icon name="data_object" size={44} className="dim" />
-      <h2>{hasProjects ? "Nothing open" : "Open a folder to get started"}</h2>
-      <p className="dim">Pick a script on the left, a file on the right, or a change in the Git view.</p>
-      <button className="btn primary" onClick={openFolders}>
-        <Icon name="folder_open" /> Open folder(s)
-      </button>
-      <dl className="shortcuts">
-        <dt>⌘O</dt><dd>Open folder</dd>
-        <dt>⌘T</dt><dd>New terminal</dd>
-        <dt>⌘W</dt><dd>Close tab</dd>
-        <dt>⌘B</dt><dd>Toggle projects</dd>
-        <dt>⌘,</dt><dd>Settings</dd>
-      </dl>
+      <Launcher />
+    </div>
+  );
+}
+
+/** Full "new…" page: new terminal, a new browser tab, and each installed coding agent. Shown on the
+ * empty state and as the launcher tab (opened by clicking "+"). */
+function Launcher({ tabId }: { tabId?: string }) {
+  const project = useStore((s) => s.config.projects.find((p) => p.id === s.config.layout.activeProjectId));
+  const space = useStore(selectActiveSpace);
+  const hidden = useStore((s) => s.config.settings.hiddenAgents);
+  const [installed, setInstalled] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    availableAgents().then(setInstalled);
+  }, []);
+  const agents = AGENTS.filter((a) => !hidden.includes(a.id) && (installed === null || installed.has(a.id)));
+  const done = () => tabId && closeTab(tabId);
+  const inSpace = (run: (projectId: string, dir: string) => void) => {
+    if (!project || !space) return notify("Open a project first.");
+    run(project.id, space.dir);
+    done();
+  };
+  const openInBrowser = (url: string) => {
+    openBrowserTab(url);
+    done();
+  };
+  return (
+    <div className="launcher">
+      <h2 className="launcher-title">Open…</h2>
+      {!project && <p className="dim small launcher-hint">Open a folder with ⌘O to get started.</p>}
+      <WorkspaceLinks onOpen={openInBrowser} editable />
+      <div className="launcher-grid">
+        <button className="launch-tile" onClick={() => inSpace((id, cwd) => newTerminal(id, { cwd }))}>
+          <Icon name="terminal" size={24} />
+          <span>New terminal</span>
+        </button>
+        <button
+          className="launch-tile"
+          onClick={() => {
+            openBrowserTab();
+            done();
+          }}
+        >
+          <Icon name="language" size={24} />
+          <span>New browser tab</span>
+        </button>
+        {agents.map((a) => (
+          <button key={a.id} className="launch-tile" onClick={() => inSpace((id, cwd) => newTerminal(id, { cwd, command: a.command, label: a.label, agent: a.id }))} title={a.command}>
+            <AgentIcon agent={a.id} size={24} />
+            <span>{a.label}</span>
+          </button>
+        ))}
+      </div>
+      <RecentLinks onOpen={openInBrowser} />
+      <PinInput />
     </div>
   );
 }
@@ -192,6 +305,16 @@ function AgentLauncher() {
   const project = useStore((s) => s.config.projects.find((p) => p.id === s.config.layout.activeProjectId));
   const space = useStore(selectActiveSpace);
   const ref = useRef<HTMLDivElement>(null);
+  const hoverTimer = useRef<number | undefined>(undefined);
+  useOverlay(open);
+  const hoverOpen = () => {
+    clearTimeout(hoverTimer.current);
+    hoverTimer.current = window.setTimeout(() => setOpen(true), 300);
+  };
+  const hoverLeave = () => {
+    clearTimeout(hoverTimer.current);
+    setOpen(false);
+  };
   useEffect(() => {
     if (!open) return;
     availableAgents().then(setInstalled);
@@ -229,30 +352,51 @@ function AgentLauncher() {
       },
     });
   };
-  // Installed first; unknown install state keeps the table order.
-  const sorted = [...AGENTS].sort((a, b) => Number(installed?.has(b.id) ?? 0) - Number(installed?.has(a.id) ?? 0));
+  // Show installed agents only (hidden ones are opt-in from Settings). While install state is still
+  // loading, show the non-hidden ones so the menu isn't momentarily empty.
+  const hidden = useStore((s) => s.config.settings.hiddenAgents);
+  const visible = AGENTS.filter((a) => !hidden.includes(a.id) && (installed === null || installed.has(a.id)));
 
   return (
-    <div className="popover-anchor tab-add" ref={ref}>
-      <button className={cx("tab-add-btn", open && "on")} title="New coding agent or terminal" aria-label="New coding agent or terminal" onClick={() => setOpen(!open)}>
+    <div className="popover-anchor tab-add" ref={ref} onMouseEnter={hoverOpen} onMouseLeave={hoverLeave}>
+      {/* Hover (after a short delay) shows this quick menu; click opens the full launcher tab. */}
+      <button
+        className={cx("tab-add-btn", open && "on")}
+        title="New… (click for all options)"
+        aria-label="New terminal, agent, or browser tab"
+        onClick={() => {
+          clearTimeout(hoverTimer.current);
+          setOpen(false);
+          openLauncherTab();
+        }}
+      >
         <Icon name="add" size={16} />
       </button>
       {open && (
         <div className="popover agent-menu" role="menu">
           <div className="menu-label">Coding agent{space ? ` · ${space.name}` : ""}</div>
-          {sorted.map((a) => {
-            const missing = installed !== null && !installed.has(a.id);
-            return (
-              <div key={a.id} role="menuitem" className={cx("menu-item", missing && "missing")} onClick={() => launch(a)} title={`${a.command}${missing ? ` (\`${a.bin}\` not found on PATH)` : ""}`}>
-                <AgentIcon agent={a.id} size={16} />
-                <span className="ellipsis">{a.label}</span>
-                {missing && <span className="dim small">not installed</span>}
-              </div>
-            );
-          })}
+          {installed !== null && visible.length === 0 && (
+            <div className="menu-item dim">No coding agents installed. Enable in Settings.</div>
+          )}
+          {visible.map((a) => (
+            <div key={a.id} role="menuitem" className="menu-item" onClick={() => launch(a)} title={a.command}>
+              <AgentIcon agent={a.id} size={16} />
+              <span className="ellipsis">{a.label}</span>
+            </div>
+          ))}
           <div className="menu-sep" />
           <div role="menuitem" className="menu-item" onClick={shell}>
             <Icon name="terminal" size={16} /> New terminal
+          </div>
+          <div
+            role="menuitem"
+            className="menu-item"
+            onClick={() => {
+              setOpen(false);
+              openBrowserTab();
+            }}
+          >
+            <Icon name="language" size={16} /> New browser tab
           </div>
           <div role="menuitem" className="menu-item" onClick={custom}>
             <Icon name="code" size={16} /> Custom command…

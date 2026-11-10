@@ -1,0 +1,124 @@
+<!doctype html>
+<!-- The fictional "storefront" dev server (localhost:3000) shown in the Browser tab by mock.js.
+     Clearly different layouts per width, so device view reads at a glance: phone = one column and a
+     menu button, tablet = two columns, desktop = full nav and a four-column grid. Links are inert. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harbor Goods</title>
+<style>
+  :root { --ink: #1d1b16; --soft: #6b6559; --line: #e7e1d6; --bg: #faf7f1; --accent: #a8461a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; color: var(--ink); background: var(--bg); }
+  a { color: inherit; text-decoration: none; }
+  header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 24px; padding: 14px 20px; background: rgba(250, 247, 241, 0.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  .logo { font-weight: 700; letter-spacing: -0.02em; font-size: 18px; }
+  .logo span { color: var(--accent); }
+  nav { display: none; gap: 22px; color: var(--soft); font-size: 14px; }
+  .grow { flex: 1; }
+  .cart { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 13px; }
+  .burger { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; display: grid; place-items: center; }
+  .burger i { display: block; width: 14px; height: 2px; background: var(--ink); box-shadow: 0 5px 0 var(--ink), 0 -5px 0 var(--ink); }
+  .hero { margin: 16px; padding: 36px 24px; border-radius: 18px; color: #fff; background: radial-gradient(120% 120% at 0% 0%, #b05226, #8f3814 55%, #5a220e); }
+  .hero small { text-transform: uppercase; letter-spacing: 0.12em; font-size: 11px; opacity: 0.85; }
+  .hero h1 { margin: 8px 0 10px; font-size: 32px; line-height: 1.05; letter-spacing: -0.03em; }
+  .hero p { margin: 0 0 18px; opacity: 0.9; max-width: 34ch; }
+  .btn { display: inline-block; padding: 10px 18px; border-radius: 999px; background: #fff; color: var(--ink); font-weight: 600; font-size: 14px; }
+  .chips { display: flex; gap: 8px; overflow: hidden; padding: 4px 16px 0; }
+  .chips a { flex: none; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--soft); background: #fff; }
+  .chips a.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  h2 { margin: 28px 16px 12px; font-size: 20px; letter-spacing: -0.02em; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 14px; padding: 0 16px; }
+  .card { border-radius: 14px; background: #fff; border: 1px solid var(--line); overflow: hidden; }
+  .card .ph { aspect-ratio: 4 / 3; background: var(--c); position: relative; }
+  .card .ph::after { content: ""; position: absolute; inset: 22% 30%; border-radius: 40% 40% 12px 12px; background: rgba(255, 255, 255, 0.28); }
+  .card .info { display: flex; justify-content: space-between; gap: 8px; padding: 10px 12px 12px; }
+  .card b { font-weight: 600; font-size: 14px; }
+  .card s { color: var(--soft); font-size: 12px; margin-right: 4px; }
+  .card em { font-style: normal; font-weight: 600; color: var(--accent); }
+  .card .sub { color: var(--soft); font-size: 12px; }
+  .banner { margin: 28px 16px; padding: 22px; border-radius: 14px; background: #efe7da; display: grid; gap: 6px; }
+  footer { margin-top: 32px; padding: 28px 20px 40px; border-top: 1px solid var(--line); color: var(--soft); font-size: 13px; display: grid; gap: 18px; }
+  footer div { display: grid; gap: 6px; }
+  footer b { color: var(--ink); }
+
+  @media (min-width: 640px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+    .hero { padding: 48px 36px; }
+    .hero h1 { font-size: 42px; }
+    footer { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (min-width: 1024px) {
+    header { padding: 16px 40px; }
+    nav { display: flex; }
+    .burger { display: none; }
+    .hero { margin: 24px 40px; padding: 72px 56px; display: grid; grid-template-columns: 1.2fr 1fr; align-items: center; }
+    .hero h1 { font-size: 56px; }
+    .hero aside { height: 220px; border-radius: 16px; background: linear-gradient(135deg, rgba(255,255,255,.35), rgba(255,255,255,.06)); }
+    .chips, h2, .grid, .banner { margin-left: 40px; margin-right: 40px; padding-left: 0; padding-right: 0; }
+    .grid { grid-template-columns: repeat(4, 1fr); gap: 20px; }
+    .banner { grid-template-columns: 1fr auto; align-items: center; }
+    footer { padding: 36px 40px 48px; grid-template-columns: 2fr 1fr 1fr 1fr; }
+  }
+  @media (max-width: 1023px) { .hero aside { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <a class="logo" href="#">Harbor<span>.</span>Goods</a>
+  <nav><a href="#">New in</a><a href="#">Shirts</a><a href="#">Knitwear</a><a href="#">Home</a><a href="#">Journal</a></nav>
+  <span class="grow"></span>
+  <a class="cart" href="#">Cart · 2</a>
+  <a class="burger" href="#" aria-label="Menu"><i></i></a>
+</header>
+
+<section class="hero">
+  <div>
+    <small>Autumn linen</small>
+    <h1>Soft layers for cooler days.</h1>
+    <p>Washed linen and merino, cut in small batches. 20% off with code AUTUMN.</p>
+    <a class="btn" href="#">Shop the edit</a>
+  </div>
+  <aside></aside>
+</section>
+
+<div class="chips"><a class="on" href="#">All</a><a href="#">Shirts</a><a href="#">Knitwear</a><a href="#">Trousers</a><a href="#">Home</a><a href="#">Gifts</a></div>
+
+<h2>New this week</h2>
+<div class="grid">
+  <a class="card" href="#"><div class="ph" style="--c:#d8c3a5"></div><div class="info"><div><b>Linen shirt</b><div class="sub">Sand · 4 colours</div></div><div><s>$88</s><em>$70</em></div></div></a>
+  <a class="card" href="#"><div class="ph" style="--c:#8fa38a"></div><div class="info"><div><b>Merino crew</b><div class="sub">Sage · 3 colours</div></div><div><em>$120</em></div></div></a>
+  <a class="card" href="#"><div class="ph" style="--c:#3f4a5a"></div><div class="info"><div><b>Chore jacket</b><div class="sub">Navy canvas</div></div><div><em>$168</em></div></div></a>
+  <a class="card" href="#"><div class="ph" style="--c:#c98b6b"></div><div class="info"><div><b>Pleated trouser</b><div class="sub">Clay · 2 colours</div></div><div><s>$110</s><em>$88</em></div></div></a>
+  <a class="card" href="#"><div class="ph" style="--c:#e6dccb"></div><div class="info"><div><b>Waffle throw</b><div class="sub">Oat cotton</div></div><div><em>$64</em></div></div></a>
+  <a class="card" href="#"><div class="ph" style="--c:#a7b6c4"></div><div class="info"><div><b>Oxford shirt</b><div class="sub">Sky · 5 colours</div></div><div><em>$78</em></div></div></a>
+  <a class="card" href="#"><div class="ph" style="--c:#6e5a4b"></div><div class="info"><div><b>Leather tote</b><div class="sub">Walnut</div></div><div><em>$210</em></div></div></a>
+  <a class="card" href="#"><div class="ph" style="--c:#cfa95e"></div><div class="info"><div><b>Ribbed beanie</b><div class="sub">Mustard</div></div><div><em>$32</em></div></div></a>
+</div>
+
+<div class="banner">
+  <div><b>Free shipping over $100</b><div class="sub">Returns are free for 30 days, no questions asked.</div></div>
+  <a class="btn" href="#" style="background: var(--ink); color: #fff">See delivery options</a>
+</div>
+
+<h2>Best sellers</h2>
+<div class="grid">
+  <a class="card" href="#"><div class="ph" style="--c:#b9a48a"></div><div class="info"><div><b>Everyday tee</b><div class="sub">Stone · 6 colours</div></div><div><em>$38</em></div></div></a>
+  <a class="card" href="#"><div class="ph" style="--c:#55606b"></div><div class="info"><div><b>Wool overshirt</b><div class="sub">Charcoal</div></div><div><em>$145</em></div></div></a>
+  <a class="card" href="#"><div class="ph" style="--c:#d6b3a0"></div><div class="info"><div><b>Linen bedding</b><div class="sub">Blush · Queen</div></div><div><em>$190</em></div></div></a>
+  <a class="card" href="#"><div class="ph" style="--c:#7d8f78"></div><div class="info"><div><b>Field cap</b><div class="sub">Olive</div></div><div><em>$36</em></div></div></a>
+</div>
+
+<footer>
+  <div><b>Harbor Goods</b>Small-batch clothing and homeware, made to last.</div>
+  <div><b>Shop</b><a href="#">New in</a><a href="#">Shirts</a><a href="#">Home</a></div>
+  <div><b>Help</b><a href="#">Delivery</a><a href="#">Returns</a><a href="#">Sizing</a></div>
+  <div><b>Company</b><a href="#">Journal</a><a href="#">Stores</a><a href="#">Contact</a></div>
+</footer>
+<script>
+  // Links stay on this page (the mock serves one document).
+  document.addEventListener("click", (e) => e.target.closest("a") && e.preventDefault());
+</script>
+</body>
+</html>

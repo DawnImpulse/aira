@@ -1,19 +1,42 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api, type Settings } from "../ipc";
 import { notify, updateConfig, useStore } from "../store";
 import { AI_PROVIDERS, aiCfg, aiProvider } from "../lib/aiProviders";
-import { hasBinary } from "../lib/agents";
-import { cx, Icon, Modal } from "./ui";
+import { AGENTS, availableAgents, hasBinary } from "../lib/agents";
+import { SHORTCUTS } from "../lib/shortcuts";
+import { AgentIcon, cx, Icon, Modal } from "./ui";
 
 // Fallbacks if the installed-font lookup fails (non-macOS or CoreText error).
 const UI_FONTS = ["Inter", "Helvetica Neue", "Helvetica", "Avenir Next", "IBM Plex Sans", "Geist", "Roboto", "Open Sans", "Lato", "Source Sans 3", "Nunito", "Manrope", "DM Sans"];
 const MONO_FONTS = ["SF Mono", "Menlo", "Monaco", "Courier New", "JetBrains Mono", "Fira Code", "Cascadia Code", "IBM Plex Mono", "Source Code Pro", "Geist Mono", "Hack", "Iosevka", "Victor Mono", "Roboto Mono", "Ubuntu Mono", "Inconsolata"];
 
+const SECTIONS = [
+  { id: "appearance", label: "Appearance", icon: "palette" },
+  { id: "agents", label: "Coding agents", icon: "smart_toy" },
+  { id: "ai", label: "Commit messages", icon: "auto_awesome" },
+  { id: "shortcuts", label: "Shortcuts", icon: "keyboard" },
+] as const;
+type Section = (typeof SECTIONS)[number]["id"];
+
+/** Native select: a <datalist> filters by the current value, so it only ever offered the font already set. */
+function FontSelect({ value, fonts, onChange }: { value: string; fonts: string[]; onChange: (f: string) => void }) {
+  const list = fonts.includes(value) ? fonts : [value, ...fonts]; // keep a saved font that's no longer installed
+  return (
+    <select className="select" value={value} onChange={(e) => onChange(e.target.value)}>
+      {list.map((f) => (
+        <option key={f} value={f}>{f}</option>
+      ))}
+    </select>
+  );
+}
+
 let installedFonts: Promise<{ all: string[]; mono: string[] }> | null = null;
+let lastSection: Section = "appearance"; // reopening lands where you left off
 
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const s = useStore((st) => st.config.settings);
   const upd = (fn: (s: Settings) => void) => updateConfig((c) => fn(c.settings));
+  const [section, setSection] = useState(lastSection);
   const [key, setKey] = useState("");
   const [models, setModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -21,10 +44,20 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const p = aiProvider(s.ai.provider);
   const saved = !!s.ai.keySaved[p.id];
   const [fonts, setFonts] = useState({ all: UI_FONTS, mono: MONO_FONTS });
+  const [installedAgents, setInstalledAgents] = useState<Set<string> | null>(null);
   useEffect(() => {
     installedFonts ??= api.listFonts().catch(() => ({ all: [], mono: [] }));
     installedFonts.then((f) => f.all.length && setFonts(f));
+    availableAgents().then(setInstalledAgents);
   }, []);
+  const pick = (id: Section) => setSection((lastSection = id));
+  const toggleAgent = (id: string, show: boolean) =>
+    upd((x) => {
+      const set = new Set(x.hiddenAgents);
+      if (show) set.delete(id);
+      else set.add(id);
+      x.hiddenAgents = [...set];
+    });
 
   useEffect(() => {
     setModels([]);
@@ -54,132 +87,185 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     }
   };
 
-  return (
-    <Modal title="Settings" onClose={onClose} width={540}>
-      <div className="form">
-        <div className="field">
-          <span>Theme</span>
-          <div className="segmented">
-            {(["dark", "light", "system"] as const).map((t) => (
-              <button key={t} className={cx(s.theme === t && "on")} onClick={() => upd((x) => void (x.theme = t))}>
-                <Icon name={t === "dark" ? "dark_mode" : t === "light" ? "light_mode" : "contrast"} size={14} /> {t[0].toUpperCase() + t.slice(1)}
-              </button>
-            ))}
-          </div>
+  const appearance = (
+    <>
+      <div className="field">
+        <span>Theme</span>
+        <div className="segmented">
+          {(["dark", "light", "system"] as const).map((t) => (
+            <button key={t} className={cx(s.theme === t && "on")} onClick={() => upd((x) => void (x.theme = t))}>
+              <Icon name={t === "dark" ? "dark_mode" : t === "light" ? "light_mode" : "contrast"} size={14} /> {t[0].toUpperCase() + t.slice(1)}
+            </button>
+          ))}
         </div>
+      </div>
 
-        <label className="field">
-          <span>Interface font</span>
-          <input list="ui-fonts" value={s.uiFont} onChange={(e) => upd((x) => void (x.uiFont = e.target.value))} placeholder="System" title="Type to search installed fonts" />
-          <datalist id="ui-fonts">{["System", ...fonts.all].map((f) => <option key={f} value={f} />)}</datalist>
+      <label className="field">
+        <span>Interface font</span>
+        <FontSelect value={s.uiFont} fonts={["System", ...fonts.all]} onChange={(f) => upd((x) => void (x.uiFont = f))} />
+      </label>
+
+      <div className="row gap">
+        <label className="field grow">
+          <span>Editor & terminal font</span>
+          <FontSelect value={s.monoFont} fonts={fonts.mono} onChange={(f) => upd((x) => void (x.monoFont = f))} />
         </label>
+        <label className="field">
+          <span>Size</span>
+          <input type="number" min={9} max={28} value={s.fontSize} onChange={(e) => upd((x) => void (x.fontSize = Math.min(28, Math.max(9, Number(e.target.value) || 13))))} />
+        </label>
+      </div>
+      <small className="dim">
+        {fonts.all.length} installed fonts ({fonts.mono.length} monospace). With a list open, type a name to jump to it.
+      </small>
 
+      <label className="check">
+        <input type="checkbox" checked={s.terminalWebgl} onChange={(e) => upd((x) => void (x.terminalWebgl = e.target.checked))} />
+        <span>GPU (WebGL) terminal rendering – faster for heavy output; turn off if terminals render blank.</span>
+      </label>
+    </>
+  );
+
+  const agents = (
+    <>
+      <label className="check">
+        <input type="checkbox" checked={s.notifyAgents} onChange={(e) => upd((x) => void (x.notifyAgents = e.target.checked))} />
+        <span>Notify me when a coding agent finishes, needs input, or exits (only when I'm not looking at it).</span>
+      </label>
+      <small className="dim">The “+” menu shows installed agents. Hide any you don’t use; enable others once their CLI is installed.</small>
+      <div className="agent-list">
+        {AGENTS.map((a) => {
+          const inst = installedAgents?.has(a.id) ?? false;
+          const shown = !s.hiddenAgents.includes(a.id);
+          return (
+            <label key={a.id} className={cx("agent-opt", !inst && "off")} title={inst ? a.command : `\`${a.bin}\` not found on PATH`}>
+              <AgentIcon agent={a.id} size={16} />
+              <span className="ellipsis">{a.label}</span>
+              {!inst && installedAgents !== null && (
+                <span className="dim small">
+                  install <code>{a.bin}</code>
+                </span>
+              )}
+              <input type="checkbox" disabled={!inst} checked={inst && shown} onChange={(e) => toggleAgent(a.id, e.target.checked)} />
+            </label>
+          );
+        })}
+      </div>
+    </>
+  );
+
+  const ai = (
+    <>
+      <small className="dim">The AI that writes a commit message when you press Generate while committing.</small>
+      <label className="field">
+        <span>Provider</span>
+        <select className="select" value={p.id} onChange={(e) => upd((x) => void (x.ai.provider = e.target.value))}>
+          {(["Cloud", "Local", "Agent CLI", "Custom"] as const).map((g) => (
+            <optgroup key={g} label={g}>
+              {AI_PROVIDERS.filter((x) => x.group === g).map((x) => (
+                <option key={x.id} value={x.id}>{x.label}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </label>
+
+      {(p.editableBase || p.group === "Custom") && (
+        <label className="field">
+          <span>Base URL</span>
+          <input
+            value={s.ai.baseUrls[p.id] ?? ""}
+            placeholder={p.baseUrl ?? "https://your-endpoint/v1"}
+            spellCheck={false}
+            onChange={(e) => upd((x) => void (x.ai.baseUrls = { ...x.ai.baseUrls, [p.id]: e.target.value }))}
+          />
+        </label>
+      )}
+
+      <label className="field">
+        <span>Model{p.kind === "cli" ? " (optional – the CLI's default otherwise)" : ""}</span>
         <div className="row gap">
-          <label className="field grow">
-            <span>Editor & terminal font</span>
-            <input list="mono-fonts" value={s.monoFont} onChange={(e) => upd((x) => void (x.monoFont = e.target.value))} title="Type to search installed monospace fonts" />
-            <datalist id="mono-fonts">{fonts.mono.map((f) => <option key={f} value={f} />)}</datalist>
-          </label>
-          <label className="field">
-            <span>Size</span>
-            <input type="number" min={9} max={28} value={s.fontSize} onChange={(e) => upd((x) => void (x.fontSize = Math.min(28, Math.max(9, Number(e.target.value) || 13))))} />
-          </label>
+          <input
+            className="grow"
+            list="ai-models"
+            value={s.ai.models[p.id] ?? p.defaultModel ?? ""}
+            placeholder={p.kind === "cli" ? "default" : "Pick or type a model id"}
+            spellCheck={false}
+            onChange={(e) => upd((x) => void (x.ai.models = { ...x.ai.models, [p.id]: e.target.value }))}
+          />
+          {p.kind !== "cli" && (
+            <button type="button" className="btn" onClick={loadModels} disabled={loadingModels || (!!p.needsKey && !saved)} title="Fetch the model list from the provider">
+              <Icon name="refresh" size={14} className={cx(loadingModels && "spin")} /> Models
+            </button>
+          )}
         </div>
-        <small className="dim">
-          {fonts.all.length} installed fonts ({fonts.mono.length} monospace) — type to search. Unknown names fall back to SF Mono / system.
-        </small>
+        <datalist id="ai-models">{models.map((m) => <option key={m} value={m} />)}</datalist>
+      </label>
 
-        <label className="check">
-          <input type="checkbox" checked={s.notifyAgents} onChange={(e) => upd((x) => void (x.notifyAgents = e.target.checked))} />
-          <span>Notify me when a coding agent finishes, needs input, or exits (only when I'm not looking at it).</span>
-        </label>
-
-        <label className="check">
-          <input type="checkbox" checked={s.terminalWebgl} onChange={(e) => upd((x) => void (x.terminalWebgl = e.target.checked))} />
-          <span>GPU (WebGL) terminal rendering – faster for heavy output; turn off if terminals render blank.</span>
-        </label>
-
-        <div className="section-title">AI (commit messages)</div>
+      {(p.needsKey || p.optionalKey) && (
         <label className="field">
-          <span>Provider</span>
-          <select className="select" value={p.id} onChange={(e) => upd((x) => void (x.ai.provider = e.target.value))}>
-            {(["Cloud", "Local", "Agent CLI", "Custom"] as const).map((g) => (
-              <optgroup key={g} label={g}>
-                {AI_PROVIDERS.filter((x) => x.group === g).map((x) => (
-                  <option key={x.id} value={x.id}>{x.label}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
-
-        {(p.editableBase || p.group === "Custom") && (
-          <label className="field">
-            <span>Base URL</span>
-            <input
-              value={s.ai.baseUrls[p.id] ?? ""}
-              placeholder={p.baseUrl ?? "https://your-endpoint/v1"}
-              spellCheck={false}
-              onChange={(e) => upd((x) => void (x.ai.baseUrls = { ...x.ai.baseUrls, [p.id]: e.target.value }))}
-            />
-          </label>
-        )}
-
-        <label className="field">
-          <span>Model{p.kind === "cli" ? " (optional – the CLI's default otherwise)" : ""}</span>
+          <span>
+            API key{p.optionalKey ? " (optional)" : ""} {saved && <em className="green">· saved</em>}
+          </span>
           <div className="row gap">
             <input
+              type="password"
               className="grow"
-              list="ai-models"
-              value={s.ai.models[p.id] ?? p.defaultModel ?? ""}
-              placeholder={p.kind === "cli" ? "default" : "Pick or type a model id"}
-              spellCheck={false}
-              onChange={(e) => upd((x) => void (x.ai.models = { ...x.ai.models, [p.id]: e.target.value }))}
+              value={key}
+              placeholder={saved ? "•••••••• (enter a new key to replace)" : `${p.label} API key`}
+              onChange={(e) => setKey(e.target.value)}
+              autoComplete="off"
             />
-            {p.kind !== "cli" && (
-              <button type="button" className="btn" onClick={loadModels} disabled={loadingModels || (!!p.needsKey && !saved)} title="Fetch the model list from the provider">
-                <Icon name="refresh" size={14} className={cx(loadingModels && "spin")} /> Models
-              </button>
-            )}
+            <button type="button" className="btn primary" disabled={!key.trim()} onClick={() => saveKey(key)}>Save</button>
+            {saved && <button type="button" className="btn" onClick={() => saveKey("")}>Remove</button>}
           </div>
-          <datalist id="ai-models">{models.map((m) => <option key={m} value={m} />)}</datalist>
-        </label>
-
-        {(p.needsKey || p.optionalKey) && (
-          <label className="field">
-            <span>
-              API key{p.optionalKey ? " (optional)" : ""} {saved && <em className="green">· saved</em>}
-            </span>
-            <div className="row gap">
-              <input
-                type="password"
-                className="grow"
-                value={key}
-                placeholder={saved ? "•••••••• (enter a new key to replace)" : `${p.label} API key`}
-                onChange={(e) => setKey(e.target.value)}
-                autoComplete="off"
-              />
-              <button type="button" className="btn primary" disabled={!key.trim()} onClick={() => saveKey(key)}>Save</button>
-              {saved && <button type="button" className="btn" onClick={() => saveKey("")}>Remove</button>}
-            </div>
-            <small className="dim">
-              <Icon name="lock" size={12} /> Stored only in your macOS Keychain (service “com.codevry.ide”); never written to Aira's config or logs.
-            </small>
-          </label>
-        )}
-
-        {p.cli && cliFound !== null && (
-          <small className={cliFound ? "green" : "red"}>
-            {cliFound ? `\`${p.cli}\` found – uses your own login and subscription.` : `\`${p.cli}\` not found on PATH – install and sign in to it first.`}
+          <small className="dim">
+            <Icon name="lock" size={12} /> Stored only in your macOS Keychain (service “com.codevry.ide”); never written to Aira's config or logs.
           </small>
-        )}
-        <small className={cx("privacy-note", `risk-${p.risk}`)}>
-          <Icon name={p.risk === "ok" ? "shield" : "warning"} size={13} />
-          <span>
-            {p.note} Nothing is sent until you press Generate.
-            {p.risk !== "ok" && " You'll be asked to confirm once before the first send."}
-          </span>
+        </label>
+      )}
+
+      {p.cli && cliFound !== null && (
+        <small className={cliFound ? "green" : "red"}>
+          {cliFound ? `\`${p.cli}\` found – uses your own login and subscription.` : `\`${p.cli}\` not found on PATH – install and sign in to it first.`}
         </small>
+      )}
+      <small className={cx("privacy-note", `risk-${p.risk}`)}>
+        <Icon name={p.risk === "ok" ? "shield" : "warning"} size={13} />
+        <span>
+          {p.note} Nothing is sent until you press Generate.
+          {p.risk !== "ok" && " You'll be asked to confirm once before the first send."}
+        </span>
+      </small>
+    </>
+  );
+
+  return (
+    <Modal title="Settings" onClose={onClose} width={720}>
+      <div className="settings">
+        <nav className="settings-nav" role="tablist" aria-orientation="vertical">
+          {SECTIONS.map((x) => (
+            <button key={x.id} role="tab" aria-selected={section === x.id} className={cx(section === x.id && "on")} onClick={() => pick(x.id)}>
+              <Icon name={x.icon} size={16} /> {x.label}
+            </button>
+          ))}
+        </nav>
+        <div className="form settings-pane" role="tabpanel">
+          <h3>{SECTIONS.find((x) => x.id === section)?.label}</h3>
+          {section === "appearance" && appearance}
+          {section === "agents" && agents}
+          {section === "ai" && ai}
+          {section === "shortcuts" && (
+            <dl className="shortcuts">
+              {SHORTCUTS.map((k) => (
+                <Fragment key={k.keys}>
+                  <dt>{k.keys}</dt>
+                  <dd>{k.label}</dd>
+                </Fragment>
+              ))}
+            </dl>
+          )}
+        </div>
       </div>
     </Modal>
   );

@@ -1,5 +1,6 @@
 mod agent;
 mod ai;
+mod browser;
 mod env;
 mod fs;
 mod git;
@@ -8,7 +9,7 @@ mod ports;
 mod pty;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Emitter, RunEvent, Runtime, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, WindowEvent};
 
 fn menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let item = |id: &str, label: &str, accel: &str| MenuItem::with_id(app, id, label, true, Some(accel));
@@ -40,6 +41,7 @@ fn menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                 &[
                     &item("open-folder", "Open Folder…", "CmdOrCtrl+O")?,
                     &item("new-terminal", "New Terminal", "CmdOrCtrl+T")?,
+                    &item("new-browser", "New Browser Tab", "CmdOrCtrl+Shift+B")?,
                     &sep()?,
                     // Cmd+W closes a tab, never the window (that would kill every dev server).
                     &item("close-tab", "Close Tab", "CmdOrCtrl+W")?,
@@ -95,9 +97,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init())
         .manage(pty::Ptys::default())
         .manage(fs::Watch::default())
+        .manage(browser::Browsers::default())
+        .manage(browser::Popped::default())
         .menu(menu)
         .on_menu_event(|app, event| {
             let _ = match event.id().as_ref() {
@@ -108,6 +111,11 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
+                // A browser pop-out closes for real; its page goes back into the tab first.
+                if let Some(id) = window.label().strip_prefix("popout-") {
+                    browser::dock(window.app_handle(), id);
+                    return;
+                }
                 api.prevent_close();
                 let _ = window.emit("quit-requested", ());
             }
@@ -123,6 +131,7 @@ pub fn run() {
                 .build()?;
             mem::start(app.handle().clone());
             agent::clear_all(app.handle());
+            agent::init_notifications(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -168,8 +177,28 @@ pub fn run() {
             ai::ai_list_models,
             agent::agent_events,
             agent::agent_events_clear,
+            agent::agent_usage,
+            agent::notify_agent,
             agent::agent_setup,
             agent::agent_repo_hooks,
+            browser::browser_open,
+            browser::browser_bounds,
+            browser::browser_navigate,
+            browser::browser_nav_action,
+            browser::browser_show,
+            browser::browser_close,
+            browser::browser_devtools,
+            browser::browser_zoom,
+            browser::browser_favicon,
+            browser::browser_query,
+            browser::browser_snapshot,
+            browser::browser_still,
+            browser::browser_fullpage,
+            browser::browser_save_shot,
+            browser::browser_popout,
+            browser::browser_dock,
+            browser::cookie_sources,
+            browser::cookie_import,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

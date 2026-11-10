@@ -5,6 +5,8 @@ import { chromium } from "playwright";
 import { readFileSync } from "node:fs";
 
 const mock = readFileSync(new URL("./mock.js", import.meta.url), "utf8");
+// The fictional shop the Browser tab shows for localhost:3000 (mock.js loads it into its stand-in iframes).
+const demoSite = readFileSync(new URL("./demo-site.html", import.meta.url), "utf8");
 
 // `demo` streams terminal output and slows a few replies so clips show the work happening (see mock.js).
 export async function open(theme, { viewport = { width: 1440, height: 900 }, demo = false } = {}) {
@@ -14,6 +16,7 @@ export async function open(theme, { viewport = { width: 1440, height: 900 }, dem
   await p.addInitScript(({ t, d }) => Object.assign(window, { __theme: t, __demo: d }), { t: theme, d: demo });
   // Keep the sidebar at its 1440px width (~288px) in smaller clip windows; narrower, its tab strip clips.
   await p.addInitScript((left) => localStorage.setItem("react-resizable-panels:outer-layout", JSON.stringify({ left, work: 100 - left })), (288 / viewport.width) * 100);
+  await p.addInitScript((html) => (window.__demoSite = html), demoSite);
   await p.addInitScript({ content: mock });
   await p.goto("http://localhost:1420/");
   await p.waitForSelector(".space-card");
@@ -63,7 +66,8 @@ export async function startScripts(p) {
 export async function geminiInCheckout(p) {
   await card(p, "checkout-v2").click();
   await p.waitForTimeout(200);
-  await p.locator(".tab-add-btn").click();
+  await p.locator(".tab-add-btn").hover(); // the + opens its quick menu on hover (a click opens the launcher tab)
+  await p.waitForTimeout(500);
   await p.locator(".agent-menu .menu-item", { hasText: "Gemini CLI" }).click();
   await p.waitForTimeout(300);
   await p.locator(".terminal-view:visible .xterm-helper-textarea").focus();
@@ -108,7 +112,8 @@ export const CLAUDE_EVENTS = [
 export const pushHooks = (p, events) => p.evaluate((e) => (window.__hookQueue ??= []).push(...e), events);
 
 export async function launchClaude(p) {
-  await p.locator(".tab-add-btn").click();
+  await p.locator(".tab-add-btn").hover(); // the + opens its quick menu on hover (a click opens the launcher tab)
+  await p.waitForTimeout(500);
   await p.locator(".agent-menu .menu-item", { hasText: "Claude Code" }).click();
   await p.waitForTimeout(400);
   await pushHooks(p, CLAUDE_EVENTS.flat());

@@ -1,13 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "Capability for the app UI: the \"main\" webview and browser pop-out windows' UI (\"popout-*\"). Scoped to webviews (not windows) so the embedded Browser tab's child webviews (\"browser:*\"), which load arbitrary sites, inherit no permissions and cannot reach Tauri IPC.",
+  "webviews": [
+    "main",
+    "popout-*"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
     "opener:default",
     "dialog:default",
-    "notification:default"
+    "core:window:allow-set-badge-count"
   ]
 }

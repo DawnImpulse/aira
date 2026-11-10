@@ -100,6 +100,7 @@
       <li><a href="#terminals" style="--h:195">Terminals</a></li>
       <li><a href="#editor" style="--h:255">Editor and themes</a></li>
       <li><a href="#ai" style="--h:345">AI commit messages</a></li>
+      <li><a href="#browser" style="--h:130">Browser</a></li>
     </ul>
   </header>
 
@@ -113,6 +114,7 @@
           <li>Spaces: the root, a nested package, a worktree.</li>
           <li>Each space keeps its own tabs, files and Git view.</li>
           <li>Star a space to pin it to the <b>Spaces</b> tab.</li>
+          <li>Sleep a space to stop its terminals and agents.</li>
           <li>Removing one never touches files on disk.</li>
         </ul>
       </div>
@@ -141,6 +143,7 @@
         <p class="lead">Start any agent CLI from the <b>+</b> in the tab bar.</p>
         <ul class="points">
           <li>Twelve agents built in, plus any custom command.</li>
+          <li>Only installed agents show; hide any in Settings.</li>
           <li>Every space card shows <b>Working</b>, <b>Needs input</b> or <b>Done</b>.</li>
           <li>Claude Code's subagents nest as they start.</li>
           <li>A notification when an agent finishes or needs you.</li>
@@ -159,7 +162,7 @@
         </figure>
         <div class="details">
           <figure>
-            <img src="screenshots/agent-launcher.webp" alt="The agent menu from the plus button: twelve coding agents with their logos, then New terminal and Custom command." width="300" height="478" loading="lazy">
+            <img src="screenshots/agent-launcher.webp" alt="The menu from the plus button: twelve coding agents with their logos, then New terminal, New browser tab and Custom command." width="300" height="500" loading="lazy">
             <figcaption>The <b>+</b> menu.</figcaption>
           </figure>
           <figure>
@@ -318,9 +321,50 @@
       </div>
       <div class="feat-media">
         <figure class="shot">
-          <img src="screenshots/settings.webp" alt="Aira's Settings: theme, interface font, editor and terminal font and size, notifications, GPU rendering, and the AI commit message provider, model and API key." width="588" height="742" loading="lazy">
-          <figcaption>Settings, with the commit-message provider at the bottom.</figcaption>
+          <img src="screenshots/settings.webp" alt="Aira's Settings on the Commit messages section, with Appearance, Coding agents and Shortcuts in the menu beside it: the AI provider, its model and API key." width="768" height="636" loading="lazy">
+          <figcaption>Settings → Commit messages: provider, model and key.</figcaption>
         </figure>
+      </div>
+    </section>
+
+    <section class="feat" id="browser" style="--h:130" aria-labelledby="browser-h">
+      <div class="feat-copy">
+        <h2 id="browser-h"><i></i>Browser</h2>
+        <p class="lead">Your dev servers and any site, in a tab.</p>
+        <ul class="points">
+          <li>Running servers, pins and recent pages on every new tab.</li>
+          <li>Phones, tablets and laptops side by side, at real widths.</li>
+          <li>Sync scrolls and navigates them together.</li>
+          <li>Capture an element, a region or the whole page.</li>
+          <li>Send a capture straight to your agent.</li>
+          <li>Pop a page out into its own window.</li>
+          <li>Sign in with cookies from Chrome, Arc and more.</li>
+        </ul>
+      </div>
+      <div class="feat-media">
+        <figure class="clip">
+          <img src="media/browser.webp" alt="" width="1920" height="1200" loading="lazy">
+          <video src="media/browser.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
+          <button class="clip-btn" type="button" data-name="browser" hidden>
+            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
+            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
+          </button>
+          <figcaption class="sr-only">Recording: the plus button's menu opens a new browser tab, which lists storefront's running dev servers. Opening dev shows the Harbor Goods shop. Device view puts it on an iPhone, an iPad and a laptop at once, each laid out for its width; with Sync on, scrolling the phone scrolls the others. Capture, Select Element, a click on a product card on the iPad, and Send to storefront · Claude Code pastes the card's selector and screenshot into the Claude Code session.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="screenshots/browser-capture-1440.webp" srcset="screenshots/browser-capture-1440.webp 1440w, screenshots/browser-capture.webp 2880w" sizes="(min-width: 1200px) 640px, 92vw" alt="Device view of the storefront dev server on an iPhone, an iPad and a laptop. A product card on the iPad was picked, and the capture menu offers Save Screenshot, Copy Selector and Send to storefront · Claude Code." width="1440" height="900" loading="lazy">
+          <figcaption>Pick an element, then save it or send it to an agent.</figcaption>
+        </figure>
+        <div class="details">
+          <figure>
+            <img src="screenshots/devices-dialog.webp" alt="The Devices dialog: phones from iPhone SE to Galaxy Z Fold and tablets from iPad mini to Surface Pro, each with a checkbox and a pin for the quick bar." width="456" height="492" loading="lazy">
+            <figcaption>25 devices, plus your own sizes.</figcaption>
+          </figure>
+          <figure>
+            <img src="screenshots/sign-ins.webp" alt="Import sign-ins: Arc's Personal and Work profiles, Chrome and Brave, each with This site and All." width="360" height="202" loading="lazy">
+            <figcaption>Sign-ins from your browsers.</figcaption>
+          </figure>
+        </div>
       </div>
     </section>
   </div>

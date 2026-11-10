@@ -18,7 +18,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# `unstable`: child webviews (Window::add_child) for the embedded Browser tab. `devtools`: runtime
+# open_devtools() in release builds.
+tauri = { version = "2", features = ["unstable", "devtools"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -31,7 +33,7 @@ tokio = { version = "1.53.1", features = ["process", "time", "sync", "macros", "
 nix = { version = "0.31.3", features = ["signal", "process"] }
 keyring = "4.2.0"
 reqwest = { version = "0.13.5", features = ["json"] }
-tauri-plugin-notification = "2"
+base64 = "0.22"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
@@ -47,3 +49,12 @@ tempfile = "3.27.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-text = "22"
+mac-notification-sys = "0.6"
+# WKWebView snapshots for the Browser tab's captures (same versions wry already pulls in).
+objc2 = "0.6"
+objc2-web-kit = "0.3"
+objc2-app-kit = "0.3"
+objc2-foundation = "0.3"
+objc2-core-foundation = "0.3"
+block2 = "0.6"
+png = "0.18"

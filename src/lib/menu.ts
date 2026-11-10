@@ -1,7 +1,8 @@
 import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { notify } from "../store";
 
-export type MenuEntry = { text: string; action: () => void; enabled?: boolean } | "-";
+/** Strings are native items: a separator, or an edit action sent to the focused field (`copy:` etc.). */
+export type MenuEntry = { text: string; action: () => void; enabled?: boolean } | "-" | "Cut" | "Copy" | "Paste" | "SelectAll";
 
 let current: Menu | null = null;
 
@@ -15,8 +16,8 @@ export async function popupMenu(entries: MenuEntry[]) {
     await current?.close().catch(() => {});
     const items = await Promise.all(
       entries.map((e, i) =>
-        e === "-"
-          ? PredefinedMenuItem.new({ item: "Separator" })
+        typeof e === "string"
+          ? PredefinedMenuItem.new({ item: e === "-" ? "Separator" : e })
           : MenuItem.new({ id: `ctx:${i}`, text: e.text, enabled: e.enabled ?? true, action: e.action }),
       ),
     );

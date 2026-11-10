@@ -3,9 +3,9 @@ import type { PanelImperativeHandle } from "react-resizable-panels";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
-import { api, type Config, type FileEntry, type GitStatus, type PortInfo, type Project, type Repo, type Script, type Space, type SpaceView, type Tab, type TermSnapshot } from "./ipc";
+import { api, type Config, type FileEntry, type GitStatus, type PortInfo, type Project, type Repo, type Script, type Space, type SpaceView, type Tab, type TermSnapshot, type UsageRow } from "./ipc";
 import { disposeModel, reloadIfClean, setEditorTheme } from "./lib/monaco";
-import { busyTerms, confirmKill, confirmScriptClose, newTerminal, removeTerm, runningList, setTerminalTheme, stop as stopTerm } from "./lib/terminals";
+import { busyTerms, confirmKill, confirmScriptClose, newTerminal, removeTerm, runningList, setTerminalTheme, sleepTerm, startSession, stop as stopTerm } from "./lib/terminals";
 import { nextIdentity } from "./lib/identity";
 import { AGENTS } from "./lib/agents";
 
@@ -51,6 +51,14 @@ export interface AgentStatus {
   unseen?: boolean;
 }
 
+/** One agent event that was worth a banner (lib/terminals notifyAgent); listed in the status bar. */
+export interface Notice {
+  key: string;
+  title: string;
+  body: string;
+  at: number;
+}
+
 interface State {
   ready: boolean;
   config: Config;
@@ -59,12 +67,16 @@ interface State {
   status: Record<string, GitStatus>; // repo path → status
   agentStatus: Record<string, AgentStatus>; // term key → activity (kept out of `terms` so it never triggers saves)
   subagents: Record<string, SubAgentNode[]>; // term key → Claude subagent tree (from hooks)
+  usage: Record<string, UsageRow[]>; // term key → tokens per model (from the Claude transcript)
+  notices: Notice[]; // newest first, capped at 50, not persisted
   mem: { sessions: Record<string, number>; app: number; procs?: Record<string, string[]> };
   dirty: Record<string, boolean>; // file path → unsaved edits
   dialog: Dialog;
   restore: string[]; // script ids running at last quit
   ports: PortInfo[]; // listening TCP ports (lib/ports)
   toast: string | null;
+  overlays: number; // open popovers/menus; the embedded browser webview hides while any are up
+  popped: Record<string, true>; // browser tab id → its page is in a pop-out window (not persisted)
 }
 
 /** Exited non-zero on its own (a user Stop is not a failure). */
@@ -73,6 +85,9 @@ export const isFailed = (t?: Term) => t?.status === "exited" && t.exitCode !== 0
 const DEFAULT_CONFIG: Config = {
   projects: [],
   scripts: {},
+  browserHistory: [],
+  customDevices: [],
+  quickDevices: ["iphone", "pixel", "ipad", "laptop", "desktop"],
   settings: {
     theme: "dark",
     uiFont: "System",
@@ -80,6 +95,7 @@ const DEFAULT_CONFIG: Config = {
     fontSize: 13,
     terminalWebgl: false,
     notifyAgents: true,
+    hiddenAgents: [],
     ai: { provider: "anthropic", models: {}, baseUrls: {}, keySaved: {}, acknowledged: {} },
   },
   layout: {
@@ -103,13 +119,20 @@ export const useStore = create<State>(() => ({
   status: {},
   agentStatus: {},
   subagents: {},
+  usage: {},
+  notices: [],
   mem: { sessions: {}, app: 0 },
   dirty: {},
   dialog: null,
   restore: [],
   ports: [],
   toast: null,
+  overlays: 0,
+  popped: {},
 }));
+
+/** Floating UI (popovers, menus) bumps this so the native browser webview hides under it. */
+export const setOverlay = (delta: number) => set((s) => ({ overlays: Math.max(0, s.overlays + delta) }));
 
 const get = useStore.getState;
 const set = useStore.setState;
@@ -237,6 +260,9 @@ function normalize(raw: Partial<Config> | null): Config {
   const c: Config = {
     projects: raw?.projects ?? [],
     scripts: raw?.scripts ?? {},
+    browserHistory: (raw?.browserHistory ?? []).slice(0, 100),
+    customDevices: raw?.customDevices ?? [],
+    quickDevices: raw?.quickDevices ?? d.quickDevices,
     settings: { ...d.settings, ...raw?.settings, ai: migrateAi(raw?.settings?.ai) },
     layout: { ...d.layout, ...raw?.layout },
   };
@@ -279,6 +305,7 @@ function normalize(raw: Partial<Config> | null): Config {
 }
 
 let saveTimer: number | undefined;
+let badge = 0; // Dock badge count last sent
 export async function saveNow() {
   clearTimeout(saveTimer);
   const { config, terms } = get();
@@ -401,7 +428,9 @@ export function setActiveSpace(projectId: string, spaceId?: string) {
   const l = get().config.layout;
   const sid = spaceId ?? (l.activeProjectId === projectId && p.spaces.some((s) => s.id === l.activeSpaceId) ? l.activeSpaceId : primarySpace(p)?.id) ?? null;
   // Selecting a space counts as seeing its finished agents.
-  const dir = p.spaces.find((s) => s.id === sid)?.dir;
+  const target = p.spaces.find((s) => s.id === sid);
+  if (target?.asleep) wakeSpace(projectId, target.id);
+  const dir = target?.dir;
   if (dir) markSeen(Object.values(get().terms).filter((t) => t.agent && spaceOfPath(t.cwd)?.dir === dir).map((t) => t.key));
   if (l.activeProjectId === projectId && l.activeSpaceId === sid) return;
   updateConfig((c) => showSpace(c, projectId, sid));
@@ -457,9 +486,7 @@ export async function removeSpace(projectId: string, spaceId: string) {
   const s = p?.spaces.find((x) => x.id === spaceId);
   if (!p || !s || s.dir === p.path) return; // the primary space can't be removed
   // Shells/agents in its window go with it (scripts keep running; reopen from the sidebar).
-  const l = get().config.layout;
-  const view = l.activeSpaceId === spaceId ? l : l.views[spaceId];
-  const doomed = (view?.tabs ?? []).flatMap((t) => (t.kind === "terminal" && !get().terms[t.key]?.scriptId ? [t.key] : []));
+  const doomed = spaceShells(spaceId);
   const busy = await busyTerms(doomed);
   const msg = `Remove space "${s.name}"? Its folder stays on disk.` + (busy.length ? `\n\nStill running, will be force closed:\n${runningList(busy)}` : "");
   if (!(await ask(msg, { title: "Remove space", kind: "warning", okLabel: busy.length ? "Force close & remove" : "Remove" }))) return;
@@ -472,6 +499,38 @@ export async function removeSpace(projectId: string, spaceId: string) {
     if (c.layout.activeSpaceId === spaceId) showSpace(c, projectId, primarySpace(x)?.id ?? null);
   });
   discover(projectId);
+}
+
+/** A space's tabs: the live layout when it's the active one, else its parked view. */
+const spaceTabs = (spaceId: string) => {
+  const l = get().config.layout;
+  return (l.activeSpaceId === spaceId ? l : l.views[spaceId])?.tabs ?? [];
+};
+/** Its shell/agent terminals (scripts are the project's, not the space's). */
+const spaceShells = (spaceId: string) => spaceTabs(spaceId).flatMap((t) => (t.kind === "terminal" && !get().terms[t.key]?.scriptId ? [t.key] : []));
+
+const setAsleep = (projectId: string, spaceId: string, asleep: boolean) =>
+  updateConfig((c) => {
+    const s = c.projects.find((x) => x.id === projectId)?.spaces.find((x) => x.id === spaceId);
+    if (s) s.asleep = asleep;
+  });
+
+/** Frees a space's CPU/RAM: stops its shells/agents and closes its browser pages; tabs stay for waking. */
+export async function sleepSpace(projectId: string, spaceId: string) {
+  const s = projectById(projectId)?.spaces.find((x) => x.id === spaceId);
+  if (!s || s.asleep) return;
+  const keys = spaceShells(spaceId);
+  const busy = await busyTerms(keys);
+  if (busy.length && !(await ask(`Put "${s.name}" to sleep?\n\nStill running, will be stopped:\n${runningList(busy)}`, { title: "Sleep space", kind: "warning", okLabel: "Stop & sleep" }))) return;
+  keys.forEach(sleepTerm);
+  for (const t of spaceTabs(spaceId)) if (t.kind === "browser") api.browserClose(t.id).catch(() => {});
+  setAsleep(projectId, spaceId, true);
+}
+
+/** Starts its terminals again; browser pages reopen when their tab is shown. */
+export function wakeSpace(projectId: string, spaceId: string) {
+  setAsleep(projectId, spaceId, false);
+  spaceShells(spaceId).forEach((k) => startSession(k));
 }
 
 export const toggleStar = (projectId: string, spaceId: string) =>
@@ -645,10 +704,169 @@ export function openFile(path: string, pinned = false) {
   if (replaced) disposeModel(replaced);
 }
 
+/** Moves tab `fromId` to `toId`'s position (drag to reorder). */
+export function moveTab(fromId: string, toId: string) {
+  updateConfig((c) => {
+    const t = c.layout.tabs;
+    const i = t.findIndex((x) => x.id === fromId);
+    const j = t.findIndex((x) => x.id === toId);
+    if (i < 0 || j < 0 || i === j) return;
+    const [tab] = t.splice(i, 1);
+    t.splice(j, 0, tab);
+  });
+}
+
 export function pinTab(id: string) {
   updateConfig((c) => {
     const t = c.layout.tabs.find((x) => x.id === id);
     if (t?.kind === "file") t.pinned = true;
+  });
+}
+
+/** Tracks the browser tab's current URL (for its title and session restore). */
+export function setBrowserUrl(id: string, url: string) {
+  updateConfig((c) => {
+    const t = c.layout.tabs.find((x) => x.id === id);
+    if (t?.kind === "browser") t.url = url;
+  });
+}
+
+/** Moves a browser tab's page into its own window. */
+export async function popOutBrowser(id: string, url: string, zoom: number, devices: string[] = [], sync = false) {
+  set((s) => ({ popped: { ...s.popped, [id]: true } }));
+  try {
+    await api.browserPopout(id, url, zoom, document.documentElement.dataset.theme ?? "dark", devices, sync);
+  } catch (e) {
+    set((s) => ({ popped: omit(s.popped, id) }));
+    notify(`Pop out failed: ${e}`);
+  }
+}
+const omit = <T,>(o: Record<string, T>, k: string) => Object.fromEntries(Object.entries(o).filter(([x]) => x !== k));
+
+/** Device-view settings of a browser tab. */
+export function patchBrowserTab(id: string, patch: { deviceView?: boolean; devices?: string[]; sync?: boolean }) {
+  updateConfig((c) => {
+    const t = c.layout.tabs.find((x) => x.id === id);
+    if (t?.kind === "browser") Object.assign(t, patch);
+  });
+}
+
+/** Running agent terminals in the active space (targets for "Send to agent"). */
+export function spaceAgents(): Term[] {
+  const space = activeSpace();
+  return Object.values(get().terms).filter((t) => t.agent && t.sessionId && t.status === "running" && space && spaceOfPath(t.cwd)?.id === space.id);
+}
+
+/** Records a visited page in the browser's new-tab history (newest first, deduped, capped). */
+export function recordBrowserHistory(url: string) {
+  if (!/^https?:/i.test(url)) return;
+  updateConfig((c) => {
+    const old = c.browserHistory?.find((h) => h.url === url);
+    c.browserHistory = [{ url, ts: Date.now(), title: old?.title }, ...(c.browserHistory ?? []).filter((h) => h.url !== url)].slice(0, 100);
+  });
+}
+
+/** Custom name for a Recent entry (empty clears it). */
+export function renameHistory(url: string, title: string) {
+  updateConfig((c) => {
+    const h = c.browserHistory.find((x) => x.url === url);
+    if (h) h.title = title.trim() || undefined;
+  });
+}
+export function removeHistory(url: string) {
+  updateConfig((c) => void (c.browserHistory = c.browserHistory.filter((h) => h.url !== url)));
+}
+
+/** Saves a custom device size ("WxH") for every tab's device view. */
+export function addCustomDevice(key: string) {
+  updateConfig((c) => void (c.customDevices.includes(key) || c.customDevices.push(key)));
+}
+
+/** Adds a device to the device view's quick bar, or takes it off. */
+export function toggleQuickDevice(key: string) {
+  updateConfig((c) => void (c.quickDevices = c.quickDevices.includes(key) ? c.quickDevices.filter((k) => k !== key) : [...c.quickDevices, key]));
+}
+
+/** Deletes a saved custom size and drops it from the quick bar and every browser tab showing it. */
+export function removeCustomDevice(key: string) {
+  updateConfig((c) => {
+    c.customDevices = c.customDevices.filter((k) => k !== key);
+    c.quickDevices = c.quickDevices.filter((k) => k !== key);
+    for (const t of [...c.layout.tabs, ...Object.values(c.layout.views).flatMap((v) => v.tabs)]) {
+      if (t.kind === "browser" && t.devices?.includes(key)) t.devices = t.devices.filter((k) => k !== key);
+    }
+  });
+}
+
+function findSpace(c: Config, spaceId: string) {
+  return c.projects.flatMap((p) => p.spaces).find((s) => s.id === spaceId);
+}
+
+/** Per-workspace pinned quick links on the browser new-tab page. */
+export function addPin(spaceId: string, url: string, title?: string) {
+  updateConfig((c) => {
+    const s = findSpace(c, spaceId);
+    if (!s) return;
+    s.pins ??= [];
+    if (!s.pins.some((p) => p.url === url)) s.pins.push({ url, title });
+  });
+}
+export function renamePin(spaceId: string, url: string, title: string) {
+  updateConfig((c) => {
+    const p = findSpace(c, spaceId)?.pins?.find((x) => x.url === url);
+    if (p) p.title = title.trim() || undefined;
+  });
+}
+export function removePin(spaceId: string, url: string) {
+  updateConfig((c) => {
+    const s = findSpace(c, spaceId);
+    if (s?.pins) s.pins = s.pins.filter((p) => p.url !== url);
+  });
+}
+
+/** Hide or unhide a detected dev server (by port) on this workspace's new-tab page. */
+export function setServerHidden(spaceId: string, port: number, hidden: boolean) {
+  updateConfig((c) => {
+    const s = findSpace(c, spaceId);
+    if (!s) return;
+    const rest = (s.hiddenServers ?? []).filter((p) => p !== port);
+    s.hiddenServers = hidden ? [...rest, port] : rest;
+  });
+}
+
+/** Custom name for a detected dev server on `port` (empty clears it, back to the script default). */
+export function renameServer(spaceId: string, port: number, name: string) {
+  updateConfig((c) => {
+    const s = findSpace(c, spaceId);
+    if (!s) return;
+    s.serverNames ??= {};
+    const v = name.trim();
+    if (v) s.serverNames[String(port)] = v;
+    else delete s.serverNames[String(port)];
+  });
+}
+
+/** Opens (or reuses) the launcher tab: a full page with all "new…" options. */
+export function openLauncherTab() {
+  updateConfig((c) => {
+    const existing = c.layout.tabs.find((t) => t.kind === "launcher");
+    if (existing) {
+      c.layout.activeTab = existing.id;
+      return;
+    }
+    const id = `launcher:${crypto.randomUUID().slice(0, 8)}`;
+    insertTab(c, { id, kind: "launcher" });
+    c.layout.activeTab = id;
+  });
+}
+
+/** Opens a new embedded-browser tab. Starts on the new-tab page (workspace servers, pins, history);
+ * the native webview is created by BrowserView once a page is opened. */
+export function openBrowserTab(url = "about:blank") {
+  const id = `browser:${crypto.randomUUID().slice(0, 8)}`;
+  updateConfig((c) => {
+    insertTab(c, { id, kind: "browser", url });
+    c.layout.activeTab = id;
   });
 }
 
@@ -671,6 +889,8 @@ export async function closeTab(id: string | null) {
     if (get().dirty[tab.path] && !(await ask(`Discard unsaved changes to ${basename(tab.path)}?`, { kind: "warning", okLabel: "Discard" }))) return;
     disposeModel(tab.path);
   }
+  // The embedded browser webview is destroyed with its tab.
+  if (tab.kind === "browser") api.browserClose(tab.id).catch(() => {});
   // Shells die with their tab; a script can keep running in the background (reopen from the sidebar).
   if (tab.kind === "terminal") {
     if (get().terms[tab.key]?.scriptId) {
@@ -756,7 +976,8 @@ function onMenu(id: string) {
   else if (id === "new-terminal") {
     const p = activeProject();
     if (p) newTerminal(p.id, { cwd: activeSpace()?.dir });
-  } else if (id === "close-tab") closeTab(config.layout.activeTab);
+  } else if (id === "new-browser") openBrowserTab();
+  else if (id === "close-tab") closeTab(config.layout.activeTab);
   else if (id === "toggle-left") togglePanel(panelApi.left);
   else if (id === "toggle-right") togglePanel(panelApi.right);
 }
@@ -776,6 +997,14 @@ export async function boot() {
       saveTimer = window.setTimeout(saveNow, 400);
     }
     if (s.config.settings !== prev.config.settings) applySettings();
+    if (s.agentStatus !== prev.agentStatus) {
+      // Dock badge: agents that finished, asked, or exited while nobody was looking.
+      const n = Object.values(s.agentStatus).filter((a) => a.unseen).length;
+      if (n !== badge) {
+        badge = n;
+        getCurrentWindow().setBadgeCount(n || undefined).catch(() => {});
+      }
+    }
   });
 
   config.projects.forEach((p) => discover(p.id));
@@ -787,5 +1016,7 @@ export async function boot() {
   });
   listen<string>("menu", (e) => onMenu(e.payload));
   listen("quit-requested", onQuitRequested);
+  listen<string>("notification-clicked", (e) => focusTerminal(e.payload));
+  listen<string>("browser:docked", (e) => set((s) => ({ popped: omit(s.popped, e.payload) })));
 }
 

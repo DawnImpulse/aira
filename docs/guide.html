@@ -95,6 +95,7 @@
         <li><a href="#shortcuts">Keyboard shortcuts</a></li>
         <li><a href="#mouse">Mouse and menus</a></li>
         <li><a href="#projects">Projects and spaces</a></li>
+        <li><a href="#browser">Browser</a></li>
         <li><a href="#scripts">Scripts</a></li>
         <li><a href="#agents">Agents</a></li>
         <li><a href="#git">Git</a></li>
@@ -115,6 +116,7 @@
               <tr><th scope="row"><kbd>⌘</kbd><kbd>,</kbd></th><td>Settings</td></tr>
               <tr><th scope="row"><kbd>⌘</kbd><kbd>O</kbd></th><td>Open a folder</td></tr>
               <tr><th scope="row"><kbd>⌘</kbd><kbd>T</kbd></th><td>New terminal</td></tr>
+              <tr><th scope="row"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>B</kbd></th><td>New browser tab</td></tr>
               <tr><th scope="row"><kbd>⌘</kbd><kbd>W</kbd></th><td>Close the current tab (never the window)</td></tr>
               <tr><th scope="row"><kbd>⌘</kbd><kbd>B</kbd></th><td>Show or hide the projects panel</td></tr>
               <tr><th scope="row"><kbd>⌥</kbd><kbd>⌘</kbd><kbd>B</kbd></th><td>Show or hide the Files and Git panel</td></tr>
@@ -143,7 +145,9 @@
           <li><b>Click a file</b> in the tree to preview it; the next preview replaces it. <b>Double-click</b> the file, or its tab, to keep it open.</li>
           <li><b>Double-click a terminal's tab</b> to rename it. The same works in the status bar's Terminals list.</li>
           <li><b>Double-click a project's name</b> to rename it. A single click folds the project away.</li>
-          <li><b>Middle-click a tab</b> to close it.</li>
+          <li><b>Middle-click a tab</b> to close it. <b>Drag a tab</b> sideways to reorder.</li>
+          <li><b>Hover the +</b> beside the tabs for a quick menu. <b>Click</b> it for every option: a terminal, a browser tab, each installed agent, and the space's dev servers and pinned links.</li>
+          <li>On a browser tab's new-tab page, <b>double-click</b> a dev server, pin or recent page to rename it (a dev server starts as its script's name). Hide servers you don't need there, such as a backend API; <b>N hidden</b> beside the heading brings them back. Pin links in the field at the bottom.</li>
           <li><b>Drag the edges</b> between panels to resize them.</li>
           <li>Space cards, scripts and git changes show their buttons when you hover them.</li>
         </ul>
@@ -154,6 +158,11 @@
             <tbody>
               <tr><th scope="row">A tab</th><td><b>Rename…</b> (terminals), <b>Close</b>, <b>Close Others</b></td></tr>
               <tr><th scope="row">A file or folder</th><td><b>New File…</b>, <b>New Folder…</b>, <b>Add as Nested Space…</b> (folders), <b>Open</b> (files), <b>Open Terminal Here</b>, <b>Reveal in Finder</b>, <b>Copy Path</b></td></tr>
+              <tr><th scope="row">A terminal</th><td><b>Copy</b>, <b>Paste</b>, <b>Select All</b>, <b>Clear</b></td></tr>
+              <tr><th scope="row">A dev server card</th><td><b>Open</b>, <b>Open in System Browser</b>, <b>Rename…</b>, <b>Hide</b></td></tr>
+              <tr><th scope="row">A pinned link</th><td><b>Open</b>, <b>Open in System Browser</b>, <b>Rename…</b>, <b>Unpin</b></td></tr>
+              <tr><th scope="row">A recent page</th><td><b>Open</b>, <b>Open in System Browser</b>, <b>Rename…</b>, <b>Pin to This Workspace</b>, <b>Remove from Recent</b></td></tr>
+              <tr><th scope="row">A text field</th><td><b>Cut</b>, <b>Copy</b>, <b>Paste</b>, <b>Select All</b></td></tr>
             </tbody>
           </table>
         </div>
@@ -167,7 +176,21 @@
           <li><b>Space settings</b>: a name and a folder, inside the project or outside it.</li>
           <li><b>Add a nested space</b> by right-clicking a folder in the file tree.</li>
           <li><b>Star a space</b> to keep it in the Spaces tab with starred spaces from other projects.</li>
+          <li><b>Sleep a space</b> (the moon on its card) to stop its terminals and agents and close its browser pages. Its tabs stay. Click the space or <b>Wake</b> to start them again. Scripts keep running.</li>
           <li><b>Remove project</b> and <b>Remove space</b> only take them out of Aira. Files on disk are not touched.</li>
+        </ul>
+      </section>
+
+      <section id="browser" aria-labelledby="browser-h">
+        <h2 id="browser-h">Browser</h2>
+        <p>Open any site or a dev server in a tab (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>B</kbd>). Pages can't reach Aira or your files.</p>
+        <ul class="plain">
+          <li><b>Capture</b>: select an element, drag a region, or take the full page. Then <b>Save Screenshot</b> to the Desktop, or <b>Send to</b> an agent in this space with the element's selector and the page.</li>
+          <li><b>Device view</b> (the devices button): the page side by side at real phone, tablet and desktop widths. Switching back and forth doesn't reload anything.</li>
+          <li>Toggle devices on the bar. <b>More devices…</b> lists 25 phones, tablets, laptops and desktops, saves custom sizes, and pins any of them to the bar.</li>
+          <li><b>Sync</b> navigates and scrolls every device together. Each device has its own reload button. The toolbar's zoom makes them all bigger or smaller; the row scrolls when they don't fit.</li>
+          <li><b>Pop out</b> the page, or the whole device view, into its own window. <b>Bring Back</b>, or close the window, to return it. Pick devices in the tab before popping out.</li>
+          <li><b>Import sign-ins</b> (the key) from Chrome, Arc, Brave, Edge, Dia and other Chromium browsers: every site, or just this one. macOS asks once per browser.</li>
         </ul>
       </section>
 
@@ -226,9 +249,10 @@
         </div>
         <ul class="plain">
           <li>Statuses: <b>Working</b>, <b>Needs input</b>, <b>Done</b>, <b>Idle</b>, <b>Exited</b> and <b>Not running</b>.</li>
+          <li>Interrupt an agent with <kbd>⌃</kbd><kbd>C</kbd> or <kbd>esc</kbd> and it shows <b>Done</b> once it goes quiet.</li>
           <li>A hook file is only added after you choose <b>Enable</b> when Aira asks. It's listed in <code>.git/info/exclude</code>, so it's never committed, and it does nothing unless the agent was started from Aira. If a file with that name already exists, Aira leaves it alone and falls back to terminal activity. Remove the files from the project's settings.</li>
           <li>Codex asks you once to trust its hook.</li>
-          <li>With notifications on, macOS tells you when an agent finishes, needs input or exits, as long as you aren't looking at it.</li>
+          <li>With notifications on, macOS tells you when an agent finishes, needs input or exits, as long as you aren't looking at it. Click the banner to jump to that terminal. The Dock icon counts agents you haven't seen yet, and the bell in the status bar lists recent events.</li>
         </ul>
       </section>
 
@@ -248,7 +272,7 @@
 
       <section id="ai" aria-labelledby="ai-h">
         <h2 id="ai-h">AI commit messages</h2>
-        <p>Choose a provider under <b>AI (commit messages)</b> in Settings. Nothing is sent until you press Generate. API keys are kept in the macOS Keychain, one entry per provider, and never in Aira's config or logs. Providers marked below ask once, before the first diff is sent (“Send diff”). <a href="https://github.com/DawnImpulse/aira/blob/main/docs/ai-providers.md">How each provider was reviewed</a>.</p>
+        <p>Choose a provider under <b>Commit messages</b> in Settings. Nothing is sent until you press Generate. API keys are kept in the macOS Keychain, one entry per provider, and never in Aira's config or logs. Providers marked below ask once, before the first diff is sent (“Send diff”). <a href="https://github.com/DawnImpulse/aira/blob/main/docs/ai-providers.md">How each provider was reviewed</a>.</p>
         <div class="table" role="region" aria-label="AI providers" tabindex="0">
           <table>
             <thead><tr><th scope="col">Provider</th><th scope="col">Kind</th><th scope="col">Needs</th><th scope="col">Asks before first send</th></tr></thead>
@@ -286,18 +310,19 @@
 
       <section id="settings" aria-labelledby="settings-h">
         <h2 id="settings-h">Settings</h2>
-        <p>Open with <kbd>⌘</kbd><kbd>,</kbd>.</p>
+        <p>Open with <kbd>⌘</kbd><kbd>,</kbd>. Four sections: Appearance, Coding agents, Commit messages and Shortcuts.</p>
         <div class="table" role="region" aria-label="Settings and defaults" tabindex="0">
           <table>
             <thead><tr><th scope="col">Setting</th><th scope="col">Options</th><th scope="col">Default</th></tr></thead>
             <tbody>
               <tr><th scope="row">Theme</th><td>Dark, Light, System</td><td>Dark</td></tr>
               <tr><th scope="row">Interface font</th><td>Any installed font</td><td>System</td></tr>
-              <tr><th scope="row">Editor &amp; terminal font</th><td>Any installed font; unknown names fall back to SF Mono</td><td>SF Mono</td></tr>
+              <tr><th scope="row">Editor &amp; terminal font</th><td>Any installed monospace font</td><td>SF Mono</td></tr>
               <tr><th scope="row">Size</th><td>9 to 28</td><td>13</td></tr>
               <tr><th scope="row">Agent notifications</th><td>When a coding agent finishes, needs input or exits, and you aren't looking at it</td><td>On</td></tr>
+              <tr><th scope="row">Coding agents</th><td>Show or hide each installed agent in the + menu; agents that aren't installed stay hidden</td><td>Every installed agent shown</td></tr>
               <tr><th scope="row">GPU (WebGL) terminal rendering</th><td>Faster for heavy output; turn off if terminals render blank</td><td>Off</td></tr>
-              <tr><th scope="row">AI (commit messages)</th><td>Provider, model, server address and API key, depending on the provider</td><td>Anthropic</td></tr>
+              <tr><th scope="row">Commit messages</th><td>Provider, model, server address and API key, depending on the provider</td><td>Anthropic</td></tr>
             </tbody>
           </table>
         </div>
@@ -315,6 +340,7 @@
               <tr><th scope="row">Close a terminal with something running</th><td><b>Force close</b> or <b>Cancel</b></td></tr>
               <tr><th scope="row">Free a port held by another process</th><td><b>Force close</b> or <b>Cancel</b></td></tr>
               <tr><th scope="row">Remove a project or a space</th><td><b>Remove</b>, or <b>Force close &amp; remove</b> if something is running</td></tr>
+              <tr><th scope="row">Sleep a space with something running</th><td><b>Stop &amp; sleep</b> or <b>Cancel</b></td></tr>
               <tr><th scope="row">Close a file with unsaved changes</th><td><b>Discard</b></td></tr>
               <tr><th scope="row">Delete a script</th><td><b>Delete</b></td></tr>
               <tr><th scope="row">Roll back files to HEAD</th><td><b>Rollback</b></td></tr>

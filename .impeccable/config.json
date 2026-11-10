@@ -1,0 +1,50 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font",
+        "value": "material symbols outlined",
+        "createdAt": "2026-11-09T03:04:07.750Z",
+        "reason": "Claude: icon font for the Icon component (src/components/ui.tsx:7), not body typography"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "docs/guide.html"
+        ],
+        "createdAt": "2026-11-10T13:02:52.464Z",
+        "reason": "Claude triage: .table wrapper's th/td have 0.7rem 1rem padding (0.6rem 0.75rem mobile), so text is inset; detector only sees the <table> box flush to the wrapper"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "helvetica neue",
+        "files": [
+          "scripts/screenshots/demo-site.html"
+        ],
+        "createdAt": "2026-11-10T15:22:34.398Z",
+        "reason": "Claude: scripts/screenshots/demo-site.html is a fictional third-party shop rendered in the mocked Browser tab for marketing media, not Aira UI"
+      },
+      {
+        "rule": "hero-eyebrow-chip",
+        "value": "*",
+        "files": [
+          "scripts/screenshots/demo-site.html"
+        ],
+        "createdAt": "2026-11-10T15:36:22.427Z",
+        "reason": "Claude: fictional third-party shop shown in the mocked Browser tab for marketing media; meant to look like a typical store, not Aira UI"
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "scripts/screenshots/demo-site.html"
+        ],
+        "createdAt": "2026-11-10T15:36:22.463Z",
+        "reason": "Claude: fictional third-party shop shown in the mocked Browser tab for marketing media; meant to look like a typical store, not Aira UI"
+      }
+    ]
+  }
+}

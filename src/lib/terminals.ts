@@ -7,10 +7,10 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
 import { api, type HookEvent, type Project, type PtyMessage, type Script, type Settings } from "../ipc";
 import { dropTab, notify, openTerminalTab, projectById, scriptCwd, scriptsWindow, spaceOfPath, uid, updateConfig, useStore, type AgentStatus, type Term } from "../store";
-import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { agentById, type Agent } from "./agents";
+import { popupMenu } from "./menu";
 import { ask, message } from "@tauri-apps/plugin-dialog";
-import { emptyTree, fold, normalize, type TreeState } from "./agentEvents";
+import { emptyTree, fold, normalize, type AgentEvent, type TreeState } from "./agentEvents";
 
 // Lazy accessor: store.ts and this module import each other.
 const get = () => useStore.getState();
@@ -84,6 +84,7 @@ function xterm(key: string): XT {
   };
   term.onData((d) => {
     lastIn.set(key, Date.now());
+    if (d === "\x03" || d === "\x1b") interrupted(key); // Ctrl+C / Esc
     const id = live();
     if (id) api.ptyWrite(id, d).catch(() => {});
   });
@@ -97,6 +98,12 @@ function xterm(key: string): XT {
   });
   const el = document.createElement("div");
   el.className = "xterm-host";
+  // xterm's own handler runs first: it selects the word under the cursor and focuses its hidden
+  // textarea with the selection, so native Copy/Paste act on the terminal.
+  el.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    popupMenu(["Copy", "Paste", "-", { text: "Select All", action: () => term.selectAll() }, { text: "Clear", action: () => term.clear() }]);
+  });
   const x: XT = { term, fit: fitAddon, el, opened: false, webgl: null };
   xts.set(key, x);
   return x;
@@ -192,7 +199,8 @@ function onExit(key: string, sessionId: string, code: number) {
   exitWaiters.delete(sessionId);
   const t = get().terms[key];
   if (!t || t.sessionId !== sessionId) return; // stale message from an earlier run
-  if (!t.scriptId && !t.command) return removeTerm(key, true); // plain shell exited (`exit`, Ctrl-D): close it like any terminal app
+  // Plain shell exited (`exit`, Ctrl-D): close it like any terminal app, unless its space went to sleep.
+  if (!t.scriptId && !t.command && !sleeping.delete(key)) return removeTerm(key, true);
   if (t.agent && t.status !== "stopping") notifyAgent(key, code === 0 ? "Exited" : `Exited with code ${code}`);
   const stopped = t.status === "stopping";
   xts.get(key)?.term.write(`\r\n\x1b[2m[${stopped ? "stopped" : `process exited with code ${code}`}]\x1b[0m\r\n`);
@@ -223,6 +231,14 @@ export async function restart(key: string, projectId?: string) {
 }
 
 const live = (t?: Term): t is Term => !!t?.sessionId && (t.status === "running" || t.status === "stopping");
+
+const sleeping = new Set<string>(); // shells stopped by a space going to sleep keep their tab
+/** Stops a terminal for a sleeping space; its tab stays so waking can start it again. */
+export function sleepTerm(key: string) {
+  if (!live(get().terms[key])) return;
+  sleeping.add(key);
+  stop(key);
+}
 
 /** Terminals among `keys` that are running something: a script/command/agent, or a shell with a foreground job. */
 export async function busyTerms(keys: string[]): Promise<Term[]> {
@@ -368,8 +384,13 @@ setInterval(() => {
     const inp = lastIn.get(t.key);
     const state = inp !== undefined && now - out < 1500 && out - inp > 500 ? "working" : "idle";
     const prev = agentStatus[t.key];
+    const cut = interruptedAt.has(t.key);
+    if (cut && state === "idle") {
+      interruptedAt.delete(t.key);
+      endSubagents(t.key, now); // an interrupted turn sends no SubagentStop either
+    }
     if (prev?.state !== state) {
-      const finished = prev?.state === "working" && state === "idle";
+      const finished = prev?.state === "working" && state === "idle" && !cut; // an interrupt isn't "finished"
       put(t.key, { state, since: now, everWorked: !!prev?.everWorked || state === "working", unseen: finished ? !watching(t.key) : state === "working" ? false : prev?.unseen });
       if (finished && now - prev.since >= 4000) notifyAgent(t.key, "Finished – waiting for you");
     }
@@ -383,28 +404,29 @@ const watching = (key: string) => document.hasFocus() && get().config.layout.act
 
 // ---------- agent notifications ----------
 
-let permission: Promise<boolean> | null = null;
 const lastNotified = new Map<string, number>();
 
 /**
- * macOS notification for an agent terminal, unless the user is already looking at it.
+ * macOS banner for an agent terminal, unless the user is already looking at it; the same event
+ * goes to the status-bar list and marks the terminal unseen (Dock badge, breathing space card).
  * Finish, bell and exit often fire together, so one per terminal per 5s (10s for the bell burst).
  */
-async function notifyAgent(key: string, what: string) {
+function notifyAgent(key: string, what: string) {
   const { terms, config } = get();
   const t = terms[key];
   if (!t?.agent || !config.settings.notifyAgents) return;
-  if (document.hasFocus() && config.layout.activeTab === `term:${key}`) return;
+  if (watching(key)) return;
   const now = Date.now();
   if (now - (lastNotified.get(key) ?? 0) < (what === "Needs your input" ? 10_000 : 5_000)) return;
   lastNotified.set(key, now);
-  permission ??= isPermissionGranted()
-    .then((ok) => ok || requestPermission().then((p) => p === "granted"))
-    .catch(() => false);
-  if (!(await permission)) return;
-  const name = t.renamed ? t.name : (agentById(t.agent)?.label ?? "Agent");
+  const title = t.renamed ? t.name : (agentById(t.agent)?.label ?? "Agent");
   const space = spaceOfPath(t.cwd);
-  sendNotification({ title: name, body: space ? `${what} · ${space.name}` : what });
+  const body = space ? `${what} · ${space.name}` : what;
+  api.notifyAgent(key, title, body).catch(() => {}); // resolves on click/clear, so never awaited
+  useStore.setState((s) => ({
+    notices: [{ key, title, body, at: now }, ...s.notices].slice(0, 50),
+    agentStatus: { ...s.agentStatus, [key]: { ...(s.agentStatus[key] ?? { state: "idle", since: now, everWorked: true }), unseen: true } },
+  }));
 }
 
 // ---------- Claude Code hooks: exact status + nested subagents ----------
@@ -460,15 +482,69 @@ async function ensureRepoHooks(t: Term, a: Agent): Promise<boolean> {
   return r === "on";
 }
 
+const interruptedAt = new Map<string, number>(); // terminals handed back to the heuristic by Ctrl+C / Esc
+
+/**
+ * Ctrl+C / Esc may interrupt the agent's turn, and agents don't send their turn-end hook then (Claude
+ * Code skips `Stop` on a user interrupt), which left status stuck on Working. Not every Esc/Ctrl+C
+ * interrupts (closing autocomplete, clearing typed text), so instead of forcing idle, hand status back
+ * to the activity heuristic: a spinner that keeps going stays Working, a quiet terminal goes idle. The
+ * next status hook (prompt/stop/waiting) switches exact status back on.
+ */
+function interrupted(key: string) {
+  if (hookActive.delete(key)) interruptedAt.set(key, Date.now());
+}
+
+/** Marks a terminal's still-running subagents as ended (its turn was cut short). */
+function endSubagents(key: string, now: number) {
+  const h = hookState.get(key);
+  if (!h) return;
+  h.pending = [];
+  for (const n of h.nodes.values()) {
+    if (!n.running) continue;
+    n.running = false;
+    n.endedAt = now;
+  }
+  useStore.setState((s) => ({ subagents: { ...s.subagents, [key]: [...h.nodes.values()] } }));
+}
+
 function forgetHooks(key: string) {
   if (!hooked.delete(key)) return;
   hookActive.delete(key);
   hookState.delete(key);
+  transcripts.delete(key);
   api.agentEventsClear(key).catch(() => {});
   useStore.setState((s) => {
     const { [key]: _, ...subagents } = s.subagents;
-    return { subagents };
+    const { [key]: __, ...usage } = s.usage;
+    return { subagents, usage };
   });
+}
+
+// ---------- Claude Code usage: tokens from the session transcript ----------
+
+// ponytail: usage hidden for now (user's call, 2026-11-10): transcripts aren't read, so no token/cost
+// labels render anywhere. Flip to true to bring it back.
+const SHOW_USAGE = false;
+const transcripts = new Map<string, string>(); // term key → transcript_path from hook payloads
+
+/** The transcript lags the hooks, so re-read 2s after a turn ends and again when the next one starts. */
+function trackUsage(key: string, raw: HookEvent[], evs: AgentEvent[]) {
+  const path = raw.find((e) => e.transcript_path)?.transcript_path;
+  if (path) transcripts.set(key, path);
+  if (evs.some((e) => e.kind === "prompt")) refreshUsage(key);
+  if (evs.some((e) => e.kind === "stop")) setTimeout(() => refreshUsage(key), 2000);
+}
+
+async function refreshUsage(key: string) {
+  const path = transcripts.get(key);
+  if (!path) return;
+  try {
+    const rows = await api.agentUsage(path);
+    useStore.setState((s) => ({ usage: { ...s.usage, [key]: rows } }));
+  } catch {
+    /* not written yet */
+  }
 }
 
 async function pollHooks(key: string) {
@@ -488,11 +564,18 @@ async function pollHooks(key: string) {
 export function applyHookEvents(key: string, events: HookEvent[]) {
   const agent = get().terms[key]?.agent ?? "";
   const exact = !!agentById(agent)?.exactStatus; // else hooks only feed subagents; status stays heuristic
-  if (exact) hookActive.add(key);
   const h = hookState.get(key) ?? emptyTree();
   hookState.set(key, h);
   const now = Date.now();
-  const main = fold(h, events.flatMap((e) => normalize(agent, e as HookEvent & Record<string, unknown>)), now);
+  const evs = events.flatMap((e) => normalize(agent, e as HookEvent & Record<string, unknown>));
+  const main = fold(h, evs, now);
+  // Exact status takes over only on a status event, so a stray tool event after an interrupt doesn't
+  // pin the old Working back on.
+  if (exact && main) {
+    hookActive.add(key);
+    interruptedAt.delete(key);
+  }
+  if (SHOW_USAGE) trackUsage(key, events, evs);
   useStore.setState((s) => ({ subagents: { ...s.subagents, [key]: [...h.nodes.values()] } }));
   if (!main || !exact) return;
   const prev = get().agentStatus[key];

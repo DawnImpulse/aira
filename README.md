@@ -16,7 +16,8 @@ Dev servers, coding agents and git for every repo you have open, in one window.
 ## Features
 
 - **Projects and spaces.** Open many folders at once; each project gets its own color and icon. Spaces (the root, a nested package, a git worktree) keep their own tabs, file tree and Git view.
-- **Coding agents.** Start Claude Code, Codex, Gemini CLI, OpenCode, Aider, Cursor Agent, Copilot CLI, Amp, Goose, Qwen Code, Crush or Factory Droid from the tab bar. Each space shows whether its agents are working, need input or are done, Claude Code's subagents appear as a tree, and macOS tells you when an agent finishes.
+- **Coding agents.** Start Claude Code, Codex, Gemini CLI, OpenCode, Aider, Cursor Agent, Copilot CLI, Amp, Goose, Qwen Code, Crush or Factory Droid from the **+** in the tab bar: hover for a quick menu, click for every option. Only installed agents show; hide any in Settings. Each space shows whether its agents are working, need input or are done, Claude Code's subagents appear as a tree, and macOS tells you when an agent finishes.
+- **Browser.** Open any site or your dev servers in a tab (⇧⌘B), with devtools and zoom. Capture an element, a region or the full page to save it or send it to an agent; preview phones, tablets and desktops side by side, in sync; pop a page or the device view out into its own window; import sign-ins from Chrome, Arc and other Chromium browsers. New tabs list the workspace's running servers, your pinned links and recent pages.
 - **Scripts.** Every project gets a scripts window. One Start button runs your usual dev servers; a failed script keeps its output and exit code.
 - **Git.** One commit panel for every repo in a project, nested repos and worktrees included. Diff against HEAD, commit, push, and generate commit messages with the AI provider, local model or agent CLI you choose. API keys stay in the macOS Keychain.
 - **Ports and memory.** See which process holds a port and free it; see each terminal's memory.

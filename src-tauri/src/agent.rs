@@ -3,8 +3,9 @@
 //! and hooks (https://code.claude.com/docs/en/hooks). Event files are local and deleted once read.
 
 use serde_json::{json, Value};
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Writes the hook's stdin JSON to its own file (mktemp → write → mv, so readers only ever see
 /// complete `*.json` files). Prints nothing and always exits 0, so it can't influence Claude.
@@ -99,9 +100,130 @@ fn read_events(dir: &Path) -> Vec<Value> {
         .collect()
 }
 
+// ---------- macOS notifications with click-to-focus ----------
+
+/// Banners post as this app once LaunchServices knows the bundle id (a built .app exists, e.g. in
+/// /Applications). Until then the crate poses as Terminal, as the notification plugin did in dev.
+pub fn init_notifications(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    let _ = mac_notification_sys::set_application(&app.config().identifier);
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+}
+
+#[cfg(target_os = "macos")]
+static WAITERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Banner for an agent terminal. A click focuses the window and emits `notification-clicked` with the key.
+#[tauri::command]
+pub async fn notify_agent(app: AppHandle, key: String, title: String, body: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use mac_notification_sys::{Notification, NotificationResponse};
+        use std::sync::atomic::Ordering;
+        // ponytail: a waiter parks a thread until its banner is clicked or cleared; past 8, fire and forget.
+        let wait = WAITERS.fetch_add(1, Ordering::SeqCst) < 8;
+        let r = tauri::async_runtime::spawn_blocking(move || {
+            let r = Notification::new().title(&title).message(&body).wait_for_click(wait).send();
+            WAITERS.fetch_sub(1, Ordering::SeqCst);
+            r
+        })
+        .await
+        .map_err(err)?
+        .map_err(err)?;
+        if matches!(r, NotificationResponse::Click) {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+            let _ = app.emit("notification-clicked", key);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, key, title, body);
+    Ok(())
+}
+
+// ---------- token usage from the Claude Code transcript ----------
+
+/// Tokens one model used in a session; the frontend prices them.
+#[derive(serde::Serialize, Default)]
+pub struct Usage {
+    pub model: String,
+    pub input: u64,
+    pub output: u64,
+    pub cache_read: u64,
+    pub cache_create: u64,
+}
+
+/// Sums the `usage` of a session's assistant messages, per model. The path comes from a hook payload
+/// Claude wrote, but only transcripts under ~/.claude are readable here.
+#[tauri::command]
+pub async fn agent_usage(app: AppHandle, path: String) -> Result<Vec<Usage>, String> {
+    let home = app.path().home_dir().map_err(err)?;
+    let p = PathBuf::from(path);
+    if !p.starts_with(home.join(".claude")) || !p.extension().is_some_and(|x| x == "jsonl") {
+        return Err("not a Claude transcript".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || read_usage(&p)).await.map_err(err)?
+}
+
+/// One transcript line per content block repeats the message's usage, so the last line per message id wins.
+fn read_usage(path: &Path) -> Result<Vec<Usage>, String> {
+    use std::io::BufRead;
+    // ponytail: full re-read per turn (~1 MB); a byte-offset cache if it shows up in profiles.
+    let f = std::fs::File::open(path).map_err(err)?;
+    let mut by_id: HashMap<String, (String, Value)> = HashMap::new();
+    for line in std::io::BufReader::new(f).lines().map_while(Result::ok) {
+        if !line.contains("\"type\":\"assistant\"") {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
+        let m = &v["message"];
+        let (Some(id), Some(usage)) = (m["id"].as_str(), m.get("usage")) else { continue };
+        by_id.insert(id.to_string(), (m["model"].as_str().unwrap_or("").to_string(), usage.clone()));
+    }
+    let mut out: BTreeMap<String, Usage> = BTreeMap::new();
+    for (model, u) in by_id.into_values() {
+        let n = |k: &str| u[k].as_u64().unwrap_or(0);
+        let e = out.entry(model.clone()).or_insert_with(|| Usage { model, ..Default::default() });
+        e.input += n("input_tokens");
+        e.output += n("output_tokens");
+        e.cache_read += n("cache_read_input_tokens");
+        e.cache_create += n("cache_creation_input_tokens");
+    }
+    Ok(out.into_values().collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn usage_dedupes_by_message_id_and_sums_per_model() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("s.jsonl");
+        let a = |id: &str, model: &str, inp: u64, out: u64| {
+            format!(
+                r#"{{"type":"assistant","message":{{"id":"{id}","model":"{model}","usage":{{"input_tokens":{inp},"output_tokens":{out},"cache_read_input_tokens":10,"cache_creation_input_tokens":5}}}}}}"#
+            )
+        };
+        let lines = [
+            r#"{"type":"user","message":{"role":"user"}}"#.to_string(),
+            a("m1", "claude-opus-5-5", 2, 100), // two blocks of one message: counted once
+            a("m1", "claude-opus-5-5", 2, 100),
+            a("m2", "claude-opus-5-5", 3, 50),
+            a("m3", "claude-haiku-4-5", 7, 1),
+            "not json".to_string(),
+        ];
+        std::fs::write(&p, lines.join("\n")).unwrap();
+        let rows = read_usage(&p).unwrap();
+        assert_eq!(rows.len(), 2);
+        let opus = rows.iter().find(|r| r.model == "claude-opus-5-5").unwrap();
+        assert_eq!((opus.input, opus.output, opus.cache_read, opus.cache_create), (5, 150, 20, 10));
+        let haiku = rows.iter().find(|r| r.model == "claude-haiku-4-5").unwrap();
+        assert_eq!((haiku.input, haiku.output), (7, 1));
+    }
 
     #[test]
     fn hook_command_writes_complete_event_files() {

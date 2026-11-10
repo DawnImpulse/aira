@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { PortInfo, Project } from "../ipc";
-import { formatBytes, isFailed, focusTerminal, projectById, repoOf, selectActiveSpace, useStore, type Term } from "../store";
+import { ago, formatBytes, isFailed, focusTerminal, projectById, repoOf, selectActiveSpace, useStore, type Term } from "../store";
 import { removeTerm, renameTerm, stop as stopTerm } from "../lib/terminals";
 import { expectedPorts, freePort, projectOfPort, refreshPorts, termOfPort, type Expected } from "../lib/ports";
-import { cx, Icon, IconButton, ProjectIcon, stop } from "./ui";
+import { usageLabel, usageTitle } from "../lib/usage";
+import { AgentIcon, cx, Icon, IconButton, ProjectIcon, stop, useOutsideClose, useOverlay } from "./ui";
 
 export function StatusBar() {
   const project = useStore((s) => s.config.projects.find((p) => p.id === s.config.layout.activeProjectId));
@@ -16,6 +17,9 @@ export function StatusBar() {
   const terms = useStore((s) => s.terms);
   const [open, setOpen] = useState(false);
   const [portsOpen, setPortsOpen] = useState(false);
+  const [noticesOpen, setNoticesOpen] = useState(false);
+  useOverlay(open || portsOpen || noticesOpen);
+  const unseen = useStore((s) => Object.values(s.agentStatus).filter((a) => a.unseen).length);
   const ports = useStore((s) => s.ports);
   const ours = ports.filter((p) => projectOfPort(p)).length;
   const live = Object.values(terms).filter((t) => t.status === "running" || t.status === "stopping");
@@ -48,6 +52,13 @@ export function StatusBar() {
           {portsOpen && <PortsPopover onClose={() => setPortsOpen(false)} />}
         </div>
         <div className="popover-anchor">
+          <button className={cx("status-btn", noticesOpen && "on")} onClick={() => setNoticesOpen(!noticesOpen)} title="Agent notifications: finished, needs input, exited">
+            <Icon name={unseen ? "notifications_unread" : "notifications"} size={13} className={unseen ? "amber" : undefined} />
+            {unseen > 0 && unseen}
+          </button>
+          {noticesOpen && <NoticesPopover onClose={() => setNoticesOpen(false)} />}
+        </div>
+        <div className="popover-anchor">
           <button className={cx("status-btn", open && "on")} onClick={() => setOpen(!open)}>
             <Icon name="terminal" size={13} className={live.length ? "green" : undefined} /> {live.length} running
           </button>
@@ -56,17 +67,6 @@ export function StatusBar() {
       </div>
     </footer>
   );
-}
-
-/** Closes a popover on a mousedown outside its anchor. */
-function useOutsideClose(onClose: () => void) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => !ref.current?.parentElement?.contains(e.target as Node) && onClose();
-    window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
-  }, [onClose]);
-  return ref;
 }
 
 /**
@@ -165,6 +165,39 @@ function PortRow({ p, label, warn, onOpen }: { p: PortInfo; label: string; warn?
   );
 }
 
+function NoticesPopover({ onClose }: { onClose: () => void }) {
+  const notices = useStore((s) => s.notices);
+  const agentStatus = useStore((s) => s.agentStatus);
+  const terms = useStore((s) => s.terms);
+  const ref = useOutsideClose(onClose);
+  return (
+    <div className="popover up wide" ref={ref}>
+      <div className="menu-label notices-head">
+        Notifications
+        {notices.length > 0 && <IconButton icon="clear_all" title="Clear the list" onClick={stop(() => useStore.setState({ notices: [] }))} />}
+      </div>
+      {!notices.length && <div className="empty-note">Nothing yet. Agents that finish, ask or exit while you're elsewhere show up here.</div>}
+      {notices.map((n) => (
+        <div
+          key={`${n.key}:${n.at}`}
+          className={cx("menu-item notice-row", agentStatus[n.key]?.unseen && "unseen")}
+          onClick={() => {
+            focusTerminal(n.key);
+            onClose();
+          }}
+          title={terms[n.key]?.cwd}
+        >
+          <AgentIcon agent={terms[n.key]?.agent} size={14} />
+          <span className="ellipsis">
+            {n.title} – {n.body}
+          </span>
+          <span className="dim">{ago(n.at)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TerminalsPopover({ onClose }: { onClose: () => void }) {
   const terms = useStore((s) => s.terms);
   const sessions = useStore((s) => s.mem.sessions);
@@ -184,6 +217,7 @@ function TerminalsPopover({ onClose }: { onClose: () => void }) {
 
 function TermRow({ t, mem, onOpen }: { t: Term; mem?: number; onOpen: () => void }) {
   const [editing, setEditing] = useState(false);
+  const usage = useStore((s) => s.usage[t.key]);
   const live = t.status === "running" || t.status === "stopping";
   return (
     <div
@@ -222,6 +256,11 @@ function TermRow({ t, mem, onOpen }: { t: Term; mem?: number; onOpen: () => void
         </span>
       )}
       <span className="dim">{projectById(t.projectId)?.name ?? ""}</span>
+      {usage && (
+        <span className="dim mono" title={usageTitle(usage)}>
+          {usageLabel(usage)}
+        </span>
+      )}
       <span className="dim mono">{mem !== undefined ? formatBytes(mem) : ""}</span>
       <IconButton icon="edit" title="Rename" onClick={stop(() => setEditing(true))} />
       {live ? (

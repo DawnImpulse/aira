@@ -143,6 +143,96 @@ export const formatPrice = (cents: number, currency = "USD") =>
   };
   const failing = { "bun run test": 1 };
 
+  // ---------- embedded browser: iframes standing in for the native child webviews ----------
+  // One fixed-position srcdoc iframe per webview id, at the rect the app sends (same-origin, so
+  // browser_query can run the picker and scroll-sync scripts in it). Page zoom z is drawn as a
+  // (w/z × h/z) iframe scaled by z, so the page lays out at its real CSS width, like WKWebView's
+  // pageZoom. Localhost pages show demo-site.html (window.__demoSite, injected by scene.mjs).
+  const frames = {};
+  const OVERLAYS = ".popover, .agent-menu, .modal-backdrop";
+  const place = (f) =>
+    Object.assign(f.el.style, { left: `${f.x}px`, top: `${f.y}px`, width: `${f.w / f.z}px`, height: `${f.h / f.z}px`, transform: `scale(${f.z})` });
+  const load = (f, url) => {
+    f.url = url;
+    f.el.srcdoc = /^https?:\/\/localhost/.test(url) ? window.__demoSite || "" : `<body style="font:14px -apple-system;padding:24px;color:#555">${url}</body>`;
+    window.__emit("browser:nav", { id: f.id, url, loading: true });
+    setTimeout(() => window.__emit("browser:nav", { id: f.id, url, loading: false }), 300);
+  };
+  // The real webview hides under popovers and shows a still instead; here the iframe already sits
+  // under them (z-index), so a hide that's only about an overlapping overlay keeps it visible.
+  const underOverlay = (f) => {
+    const r = f.el.getBoundingClientRect();
+    return [...document.querySelectorAll(OVERLAYS)].some((o) => {
+      const b = o.getBoundingClientRect();
+      return b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > r.top;
+    });
+  };
+  function browserOpen(a) {
+    let f = frames[a.id];
+    if (!f) {
+      const el = document.createElement("iframe");
+      el.style.cssText = "position:fixed;border:0;transform-origin:0 0;z-index:15;background:#fff";
+      document.body.appendChild(el);
+      f = frames[a.id] = { id: a.id, el, z: 1 };
+      el.onload = () =>
+        el.contentWindow.addEventListener("mousemove", (e) => Object.assign(mouse, { x: f.x + e.clientX * f.z, y: f.y + e.clientY * f.z }), true);
+      Object.assign(f, { x: a.x, y: a.y, w: a.w, h: a.h, z: a.zoom || 1 });
+      place(f);
+      load(f, a.url);
+    } else {
+      Object.assign(f, { x: a.x, y: a.y, w: a.w, h: a.h, z: a.zoom || f.z });
+      place(f);
+    }
+    f.el.style.display = "";
+  }
+  const shopIcon =
+    "data:image/svg+xml;base64," +
+    btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#a8461a"/><path d="M9 13h14l-1.5 10h-11z" fill="#fff"/><path d="M12.5 13a3.5 3.5 0 0 1 7 0" stroke="#fff" stroke-width="2" fill="none"/></svg>');
+
+  // ---------- native menus, drawn as HTML (headless Chromium has none) ----------
+  // plugin:menu|new hands over each item's text, enabled flag and action channel; popup draws a
+  // macOS-style menu at the mouse and an item click fires its channel, like the real menu would.
+  const menus = {};
+  const mouse = { x: 0, y: 0 };
+  addEventListener("mousemove", (e) => Object.assign(mouse, { x: e.clientX, y: e.clientY }), true);
+  function popupMenu(m) {
+    document.querySelector(".mock-menu")?.remove();
+    if (!m) return null;
+    const dark = document.documentElement.dataset.theme !== "light";
+    const el = document.createElement("div");
+    el.className = "mock-menu";
+    el.style.cssText = `position:fixed;z-index:9999;min-width:200px;padding:5px;border-radius:9px;font:13px -apple-system,BlinkMacSystemFont,sans-serif;
+      backdrop-filter:blur(20px);background:${dark ? "rgba(44,44,46,.94)" : "rgba(246,246,246,.94)"};color:${dark ? "#f2f2f2" : "#1d1d1f"};
+      box-shadow:0 0 0 .5px ${dark ? "rgba(255,255,255,.18)" : "rgba(0,0,0,.18)"},0 12px 32px rgba(0,0,0,.35)`;
+    for (const [rid] of m.items ?? []) {
+      const it = menus[rid];
+      if (!it) continue;
+      if (it.item === "Separator") {
+        el.insertAdjacentHTML("beforeend", `<div style="height:1px;margin:5px 9px;background:${dark ? "rgba(255,255,255,.14)" : "rgba(0,0,0,.12)"}"></div>`);
+        continue;
+      }
+      const row = document.createElement("div");
+      row.textContent = it.text ?? String(it.item ?? "");
+      row.className = "mock-menu-item";
+      row.style.cssText = `padding:3px 10px;border-radius:5px;line-height:18px;white-space:nowrap;${it.enabled === false ? "opacity:.4" : "cursor:default"}`;
+      if (it.enabled !== false) {
+        row.onmouseenter = () => Object.assign(row.style, { background: "#0a64d6", color: "#fff" });
+        row.onmouseleave = () => Object.assign(row.style, { background: "", color: "" });
+        row.onclick = () => {
+          el.remove();
+          if (it.handler) internals.runCallback(it.handler, { index: 0, message: it.id });
+        };
+      }
+      el.appendChild(row);
+    }
+    document.body.appendChild(el);
+    const w = el.offsetWidth, h = el.offsetHeight;
+    el.style.left = `${Math.min(mouse.x + 2, innerWidth - w - 6)}px`;
+    el.style.top = `${Math.min(mouse.y + 2, innerHeight - h - 6)}px`;
+    setTimeout(() => addEventListener("mousedown", (e) => !el.contains(e.target) && el.remove(), { capture: true, once: true }), 0);
+    return null;
+  }
+
   async function handle(cmd, a) {
     switch (cmd) {
       case "plugin:event|listen":
@@ -202,8 +292,11 @@ export const formatPrice = (cents: number, currency = "USD") =>
         return a.names.filter((n) => ["bun", "npm", "go", "python3", "make", "docker", "claude", "codex", "gemini", "opencode", "aider", "cursor-agent", "copilot", "amp", "goose", "qwen", "crush", "droid"].includes(n));
       case "plugin:menu|new": {
         const rid = 1000 + (window.__menuRid = (window.__menuRid ?? 0) + 1);
+        menus[rid] = { ...a.options, handler: a.handler?.id };
         return [rid, a.options?.id ?? `m${rid}`];
       }
+      case "plugin:menu|popup":
+        return popupMenu(menus[a.rid]);
       case "ai_list_models":
         return ["claude-haiku-4-5", "claude-sonnet-5", "claude-opus-5-5"];
       case "git_last_message":
@@ -233,6 +326,15 @@ export const formatPrice = (cents: number, currency = "USD") =>
         window.__ptys[a.id] = { send, args: a };
         return 4242;
       }
+      case "pty_write": {
+        // Echo pastes (e.g. a browser capture sent to an agent) the way Claude Code shows them: the image
+        // path becomes an attachment chip. Plain keystrokes aren't echoed; clips draw their own output.
+        const s = String(a.data);
+        if (!s.includes("\x1b[200~")) return null;
+        const text = s.replace(/\x1b\[20[01]~/g, "").replace(/(?:\\ |\S)+\.png/g, `${C.c}[Image #1]${C.x}`);
+        window.__ptys[a.id]?.send(new TextEncoder().encode(text).buffer);
+        return null;
+      }
       case "pty_kill":
         setTimeout(() => window.__ptys[a.id]?.send({ exit: 130 }), 30);
         return null;
@@ -245,6 +347,59 @@ export const formatPrice = (cents: number, currency = "USD") =>
       case "ai_commit_message":
         await new Promise((r) => setTimeout(r, window.__demo ? 900 : 300));
         return "fix(pricing): tax the discounted subtotal\n\nRound once at the end; fixed coupons respect minSpend.";
+      case "browser_open":
+        return browserOpen(a);
+      case "browser_bounds": {
+        const f = frames[a.id];
+        if (f) Object.assign(f, { x: a.x, y: a.y, w: a.w, h: a.h }) && place(f);
+        return null;
+      }
+      case "browser_show": {
+        const f = frames[a.id];
+        if (f) f.el.style.display = a.visible || underOverlay(f) ? "" : "none";
+        return null;
+      }
+      case "browser_navigate":
+        return frames[a.id] && load(frames[a.id], a.url);
+      case "browser_nav_action":
+        return frames[a.id] && a.action === "reload" ? load(frames[a.id], frames[a.id].url) : null;
+      case "browser_zoom": {
+        const f = frames[a.id];
+        if (f) (f.z = a.factor), place(f);
+        return null;
+      }
+      case "browser_close":
+        for (const [id, f] of Object.entries(frames)) {
+          if (id === a.id || id.startsWith(a.id + "/")) f.el.remove(), delete frames[id];
+        }
+        return null;
+      case "browser_query":
+        return a.ids.map((id) => {
+          try {
+            const r = frames[id]?.el.contentWindow.eval(a.js);
+            return r === undefined || r === null ? null : String(r);
+          } catch {
+            return null;
+          }
+        });
+      case "browser_favicon":
+        return /^https?:\/\/localhost:3000/.test(a.url) ? shopIcon : null;
+      case "browser_still":
+        return null;
+      case "browser_snapshot":
+      case "browser_fullpage":
+        return "/Users/dev/Library/Application Support/com.codevry.ide/screenshots/1762790400000.png";
+      case "browser_save_shot":
+        return "/Users/dev/Desktop/Aira 2026-11-10 at 10.42.07.png";
+      case "cookie_sources":
+        return [
+          { browser: "Arc", profile: "Default", name: "Personal" },
+          { browser: "Arc", profile: "Profile 1", name: "Work" },
+          { browser: "Chrome", profile: "Default", name: "Person 1" },
+          { browser: "Brave", profile: "Default", name: "Default" },
+        ];
+      case "cookie_import":
+        return a.host ? 23 : 1874;
       default:
         return null;
     }

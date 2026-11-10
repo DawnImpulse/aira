@@ -38,8 +38,12 @@ const claude: Normalizer = (e) => {
       return caller ? [] : [{ kind: "prompt" }];
     case "Stop":
       return caller ? [] : [{ kind: "stop" }];
-    case "Notification":
-      return caller ? [] : [{ kind: "waiting" }];
+    case "Notification": {
+      // Only prompts for the user; auth_success, agent_completed, quota_auto_resume_* etc. are not "needs input".
+      const t = str(e.notification_type) ?? "";
+      const asks = !t || ["permission_prompt", "idle_prompt", "agent_needs_input"].includes(t) || t.startsWith("elicitation");
+      return caller || !asks ? [] : [{ kind: "waiting" }];
+    }
   }
   return [];
 };
