@@ -8,7 +8,6 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 ## Open
 
 - [ ] Browser tab: select an element (div) on the page and attach it to an agent chat · ~TBD
-- [ ] Browser tab: device views (mobile, tablet, desktop presets plus custom sizes, several side by side), replacing responsive-preview apps like Sizzy/Polypane · ~TBD
 - [ ] Browser tab: pop out into its own window (and back into a tab) · ~TBD
 - [ ] Browser tab: import logins (cookies) from Chrome/Arc/Brave/Edge/Dia for quick sign-in · ~TBD
 - [ ] Small workspaces for branching and doing work · ~TBD
@@ -20,6 +19,7 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 ## Done
 
 <!-- - [x] What · vX.Y.Z · YYYY-MM-DD -->
+- [x] Browser tab: device views (25 presets + saved custom sizes, side by side, sync, zoom, pop-out) · v0.1.0 · 2026-11-10
 - [x] Rename the GitHub repo to `aira` (site links updated) · 2026-10-02
 - [x] Publish the website on Vercel at aira.codevry.com (README links updated) · 2026-10-02
 - [x] App: dark text on the primary button (white on #6aa8ff is 2.4:1, below WCAG AA) · v0.1.0 · 2026-11-09

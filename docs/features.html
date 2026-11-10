@@ -63,6 +63,8 @@
   .details figcaption, .shot figcaption { font-size: var(--text-sm); color: var(--prose); text-align: center; text-wrap: balance; }
   .feat-media > .shot { display: grid; gap: 0.6rem; justify-items: center; }
 
+  /* A feature without media yet: copy only, one column. */
+  .feat.solo { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
   @media (min-width: 961px) {
     .feat-copy { position: sticky; top: 6.5rem; }
   }
@@ -100,6 +102,7 @@
       <li><a href="#terminals" style="--h:195">Terminals</a></li>
       <li><a href="#editor" style="--h:255">Editor and themes</a></li>
       <li><a href="#ai" style="--h:345">AI commit messages</a></li>
+      <li><a href="#browser" style="--h:130">Browser</a></li>
     </ul>
   </header>
 
@@ -322,6 +325,21 @@
           <img src="screenshots/settings.webp" alt="Aira's Settings: theme, interface font, editor and terminal font and size, notifications, GPU rendering, and the AI commit message provider, model and API key." width="588" height="742" loading="lazy">
           <figcaption>Settings, with the commit-message provider at the bottom.</figcaption>
         </figure>
+      </div>
+    </section>
+
+    <section class="feat solo" id="browser" style="--h:130" aria-labelledby="browser-h">
+      <div class="feat-copy">
+        <h2 id="browser-h"><i></i>Browser</h2>
+        <p class="lead">Your dev servers and any site, in a tab.</p>
+        <ul class="points">
+          <li>Running servers, pins and recent pages on every new tab.</li>
+          <li>Capture an element, a region or the whole page.</li>
+          <li>Send a capture straight to your agent.</li>
+          <li>Phones, tablets and desktops side by side, in sync.</li>
+          <li>Pop a page out into its own window.</li>
+          <li>Sign in with cookies from Chrome, Arc and more.</li>
+        </ul>
       </div>
     </section>
   </div>
