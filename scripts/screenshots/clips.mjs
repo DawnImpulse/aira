@@ -306,7 +306,9 @@ const CLIPS = {
       await wait(400);
       const add = await rect(p.locator(".tab-add-btn"));
       const menu = { x: add.x - 120, y: add.y - 10, width: 380, height: 430 };
-      await take.click(p.locator(".tab-add-btn"), { look: menu, hold: 900 });
+      // Hovering the + opens its quick menu (a click would open the launcher tab).
+      await take.move({ x: add.x + add.width / 2, y: add.y + add.height / 2 });
+      await take.look(menu, { hold: 900 });
       await wait(450);
       await take.click(p.locator(".agent-menu .menu-item", { hasText: "Claude Code" }), { look: menu, hold: 300 });
       // The space card and the session side by side.
@@ -489,6 +491,81 @@ const CLIPS = {
       await wait(1200);
       take.poster();
       await wait(2000);
+    }),
+
+  // Browser: open the storefront dev server from a new tab, see it on a phone, a tablet and a laptop at once,
+  // scroll them together, then pick a product card and hand it to Claude Code. (mock.js stands in iframes
+  // of demo-site.html for the native webviews, and draws the native menus.)
+  browser: () =>
+    clip("browser", WIDE, async (p) => {
+      await startScripts(p);
+      await card(p, "storefront").click(); // Start left the scripts window in front
+      await p.waitForTimeout(300);
+      await launchClaude(p);
+      await pushHooks(p, [{ hook_event_name: "Stop" }]); // Claude Code waiting for its next task
+      await term(p, SESSION.head);
+      await p.evaluate(() => window.__emit("menu", "toggle-right")); // room for three devices
+      await p.waitForTimeout(600);
+    }, async (p, take) => {
+      await wait(400);
+      const add = await rect(p.locator(".tab-add-btn"));
+      const menu = { x: add.x - 120, y: add.y - 10, width: 380, height: 430 };
+      await take.move({ x: add.x + add.width / 2, y: add.y + add.height / 2 }); // hover opens the quick menu
+      await take.look(menu, { hold: 700 });
+      await wait(500);
+      await take.click(p.locator(".agent-menu .menu-item", { hasText: "New browser tab" }), { look: menu, hold: 300 });
+      await wait(500);
+      const main = await rect(p.locator(".main"));
+      const top = { x: main.x, y: main.y, width: main.width * 0.75, height: 380 };
+      await take.look(top, { hold: 1300 });
+      await p.locator(".start-tile", { hasText: "dev" }).first().waitFor(); // the port scan lists running servers
+      await take.click(p.locator(".start-tile", { hasText: "dev" }).first(), { look: main, hold: 1700 });
+      await wait(1300);
+      // Device view, then swap Desktop for Laptop and turn on Sync.
+      await take.click(byTitle(p, "Device view"), { look: main, hold: 500 });
+      await wait(700);
+      const bar = await rect(p.locator(".device-bar"));
+      const barCue = { x: bar.x, y: bar.y - 40, width: bar.width, height: 240 };
+      await take.click(p.locator(".device-chip", { hasText: "Laptop" }), { look: barCue, hold: 300 });
+      await wait(500);
+      await take.click(p.locator(".device-chip", { hasText: "Desktop" }), { look: barCue, hold: 300 });
+      await wait(500);
+      await take.click(p.locator(".device-sync input"), { look: barCue, hold: 300 });
+      await wait(400);
+      // Zoom out until the laptop fits beside the others (a frame cut off by the edge stays hidden).
+      for (let i = 0; i < 2; i++) {
+        await take.click(byTitle(p, "Smaller devices"), { look: barCue, hold: 200 });
+        await wait(300);
+      }
+      await wait(400);
+      await take.look(main, { hold: 2600 });
+      // Scroll the phone; the tablet and laptop follow.
+      const phone = await rect(p.locator(".device-screen").first());
+      await take.move({ x: phone.x + phone.width / 2, y: phone.y + phone.height * 0.6 }, 700);
+      for (let i = 0; i < 9; i++) {
+        await p.mouse.wheel(0, 110);
+        await wait(110);
+      }
+      await wait(1600);
+      take.poster();
+      // Pick a product card on the tablet and send it to Claude Code.
+      await take.click(byTitle(p, "Capture: element, region or full page"), { look: main, hold: 400 });
+      await wait(350);
+      await take.click(p.locator(".mock-menu-item", { hasText: "Select Element" }), { look: main, hold: 300 });
+      await wait(400);
+      const tablet = await rect(p.locator(".device-screen").nth(1));
+      const target = { x: tablet.x + tablet.width * 0.28, y: tablet.y + tablet.height * 0.42 };
+      const zoomIn = { x: tablet.x - 20, y: tablet.y, width: tablet.width + 40, height: tablet.height * 0.75 };
+      await take.move(target, 800);
+      await take.look(zoomIn, { hold: 1200 });
+      await wait(900);
+      await take.click({ x: target.x - 1, y: target.y - 1, width: 2, height: 2 }, { look: zoomIn, hold: 1100 });
+      await wait(900);
+      await take.click(p.locator(".mock-menu-item", { hasText: "Send to" }), { look: zoomIn, hold: 400 });
+      await wait(600);
+      await take.look({ x: main.x, y: main.y, width: main.width, height: 360 }, { hold: 2600 });
+      await take.move({ x: main.x + 300, y: main.y + 300 }, 700);
+      await wait(2200);
     }),
 };
 

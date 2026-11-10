@@ -53,8 +53,12 @@ async function capture(theme) {
   await sidebar("agents-sidebar", head.y - 10, sf.locator(".space-card").nth(1));
 
   // Agent launcher.
-  await p.locator(".tab-add-btn").click();
-  await p.waitForTimeout(300);
+  await p.locator(".tab-add-btn").hover(); // hover opens the quick menu
+  await p.waitForTimeout(600);
+  // Park the mouse on the menu's own padding: solo() hides the +, which would count as leaving it.
+  const menuBox = await box(p.locator(".agent-menu"));
+  await p.mouse.move(menuBox.x + 3, menuBox.y + 3);
+  await p.waitForTimeout(150);
   await solo("agent-launcher", ".agent-menu");
   await p.keyboard.press("Escape");
   await p.mouse.click(1000, 600);
@@ -122,10 +126,55 @@ async function capture(theme) {
   await p.keyboard.press("Escape");
   await p.waitForTimeout(300);
 
-  // Settings.
+  // Settings, on its Commit messages section (the features page shows it under AI commit messages).
   await byTitle(p, "Settings (⌘,)").click();
   await p.waitForTimeout(600);
+  await p.locator(".settings-nav button", { hasText: "Commit messages" }).click();
+  await p.waitForTimeout(400);
   await solo("settings", ".modal", 24);
+  await p.keyboard.press("Escape");
+  await p.waitForTimeout(300);
+
+  // Browser tab (mock.js stands in iframes of demo-site.html for the native webviews): the storefront dev
+  // server on a phone, a tablet and a laptop, with the right panel folded away for room.
+  await p.evaluate(() => window.__emit("menu", "toggle-right"));
+  await p.evaluate(() => window.__emit("menu", "new-browser"));
+  await p.locator(".start-tile", { hasText: "dev" }).first().waitFor(); // the port scan lists running servers
+  await p.locator(".start-tile", { hasText: "dev" }).first().click();
+  await p.waitForTimeout(1200);
+  await byTitle(p, "Device view").click();
+  await p.waitForTimeout(800);
+  await p.locator(".device-chip", { hasText: "Laptop" }).click();
+  await p.locator(".device-chip", { hasText: "Desktop" }).click();
+  await p.locator(".device-sync input").check();
+  for (let i = 0; i < 2; i++) await byTitle(p, "Smaller devices").click(); // the laptop fits beside the others
+  await p.waitForTimeout(1500);
+
+  // Capture: pick a product card on the tablet; the menu offers Save or Send to the space's agent.
+  await byTitle(p, "Capture: element, region or full page").click();
+  await p.locator(".mock-menu-item", { hasText: "Select Element" }).click();
+  await p.waitForTimeout(400);
+  const tablet = await box(p.locator(".device-screen").nth(1));
+  await p.mouse.move(tablet.x + tablet.width * 0.28, tablet.y + tablet.height * 0.42, { steps: 6 });
+  await p.waitForTimeout(400);
+  await p.mouse.down();
+  await p.mouse.up();
+  await p.waitForTimeout(900);
+  await p.mouse.move(tablet.x + tablet.width * 0.28 + 40, tablet.y + tablet.height * 0.42 + 70, { steps: 4 }); // over "Send to"
+  await p.waitForTimeout(300);
+  await shot("browser-capture");
+  await p.mouse.click(1100, 880); // close the menu
+  await p.waitForTimeout(300);
+
+  // More devices…, and importing sign-ins.
+  await p.locator(".device-chip.more").click();
+  await p.waitForTimeout(500);
+  await solo("devices-dialog", ".modal", 24);
+  await p.keyboard.press("Escape");
+  await p.waitForTimeout(300);
+  await byTitle(p, "Import sign-ins from your browsers").click();
+  await p.waitForTimeout(500);
+  await solo("sign-ins", ".logins-pop", 20);
   await browser.close();
 }
 
@@ -137,7 +186,7 @@ for (const f of pngs) {
   const name = f.replace(/\.png$/, "");
   webp(join(TMP, f), `${name}.webp`);
   // Full-window shots also get a 1x variant for the page's srcset (phones and 1x screens).
-  if (["hero", "git", "scripts", "light"].includes(name)) webp(join(TMP, f), `${name}-1440.webp`, "-resize", "1440", "0");
+  if (["hero", "git", "scripts", "light", "browser-capture"].includes(name)) webp(join(TMP, f), `${name}-1440.webp`, "-resize", "1440", "0");
 }
 console.log(`Wrote ${pngs.length} screenshots to docs/screenshots/`);
 await import("./og.mjs"); // the social card is built from the new hero shot
