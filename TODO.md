@@ -9,6 +9,7 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 
 - [ ] Add a "sleep" option to a space (suspend it) · ~TBD
 - [ ] Improve the Settings page · ~TBD
+- [ ] Browser tab: select an element (div) on the page and attach it to an agent chat · ~TBD
 - [ ] Browser tab: import logins (cookies) from Chrome/Arc/Brave/Edge/Dia for quick sign-in · ~TBD
 - [ ] Small workspaces for branching and doing work · ~TBD
 - [ ] Connect the website's feedback form: set `action` on the form in `docs/feedback.html` · ~TBD
