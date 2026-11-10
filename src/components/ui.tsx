@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useReducer, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { api, type ProjectIcon as ProjectIconValue } from "../ipc";
 import { agentById } from "../lib/agents";
 import { setOverlay } from "../store";
@@ -13,7 +13,18 @@ export function useOverlay(open: boolean) {
   }, [open]);
 }
 
-export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
+/** Closes a popover on a mousedown outside its anchor. */
+export function useOutsideClose(onClose: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDown = (e: globalThis.MouseEvent) => !ref.current?.parentElement?.contains(e.target as Node) && onClose();
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [onClose]);
+  return ref;
+}
+
+export const cx =(...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
 export function Icon({ name, size = 16, className, title, color }: { name: string; size?: number; className?: string; title?: string; color?: string }) {
   return (

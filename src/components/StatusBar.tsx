@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { PortInfo, Project } from "../ipc";
 import { ago, formatBytes, isFailed, focusTerminal, projectById, repoOf, selectActiveSpace, useStore, type Term } from "../store";
 import { removeTerm, renameTerm, stop as stopTerm } from "../lib/terminals";
 import { expectedPorts, freePort, projectOfPort, refreshPorts, termOfPort, type Expected } from "../lib/ports";
 import { usageLabel, usageTitle } from "../lib/usage";
-import { AgentIcon, cx, Icon, IconButton, ProjectIcon, stop, useOverlay } from "./ui";
+import { AgentIcon, cx, Icon, IconButton, ProjectIcon, stop, useOutsideClose, useOverlay } from "./ui";
 
 export function StatusBar() {
   const project = useStore((s) => s.config.projects.find((p) => p.id === s.config.layout.activeProjectId));
@@ -67,17 +67,6 @@ export function StatusBar() {
       </div>
     </footer>
   );
-}
-
-/** Closes a popover on a mousedown outside its anchor. */
-function useOutsideClose(onClose: () => void) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => !ref.current?.parentElement?.contains(e.target as Node) && onClose();
-    window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
-  }, [onClose]);
-  return ref;
 }
 
 /**

@@ -9,7 +9,7 @@ mod ports;
 mod pty;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Emitter, RunEvent, Runtime, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, WindowEvent};
 
 fn menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let item = |id: &str, label: &str, accel: &str| MenuItem::with_id(app, id, label, true, Some(accel));
@@ -100,6 +100,7 @@ pub fn run() {
         .manage(pty::Ptys::default())
         .manage(fs::Watch::default())
         .manage(browser::Browsers::default())
+        .manage(browser::Popped::default())
         .menu(menu)
         .on_menu_event(|app, event| {
             let _ = match event.id().as_ref() {
@@ -110,6 +111,11 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
+                // A browser pop-out closes for real; its page goes back into the tab first.
+                if let Some(id) = window.label().strip_prefix("popout-") {
+                    browser::dock(window.app_handle(), id);
+                    return;
+                }
                 api.prevent_close();
                 let _ = window.emit("quit-requested", ());
             }
@@ -184,6 +190,15 @@ pub fn run() {
             browser::browser_devtools,
             browser::browser_zoom,
             browser::browser_favicon,
+            browser::browser_query,
+            browser::browser_snapshot,
+            browser::browser_still,
+            browser::browser_fullpage,
+            browser::browser_save_shot,
+            browser::browser_popout,
+            browser::browser_dock,
+            browser::cookie_sources,
+            browser::cookie_import,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

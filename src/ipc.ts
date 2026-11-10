@@ -47,6 +47,13 @@ export interface BrowserPin {
   title?: string;
 }
 
+export interface CookieSource {
+  browser: string;
+  /** Profile folder ("" = the browser's own folder). */
+  profile: string;
+  name: string;
+}
+
 export interface BrowserHistoryEntry {
   url: string;
   ts: number;
@@ -111,7 +118,8 @@ export type Tab =
   | { id: string; kind: "terminal"; key: string }
   | { id: string; kind: "file"; path: string; pinned: boolean }
   | { id: string; kind: "diff"; repo: string; path: string; orig: string | null; staged: boolean; head?: boolean }
-  | { id: string; kind: "browser"; url: string }
+  /** `deviceView`: show `devices` (BrowserView `DEVICES` ids or "WxH") side by side instead of one page. */
+  | { id: string; kind: "browser"; url: string; deviceView?: boolean; devices?: string[]; sync?: boolean }
   | { id: string; kind: "launcher" };
 
 /** A space's own main tabs and right panel choice. */
@@ -127,6 +135,10 @@ export interface Config {
   settings: Settings;
   /** Embedded-browser visit history (newest first), for the new-tab page. */
   browserHistory: BrowserHistoryEntry[];
+  /** Saved custom device sizes ("WxH") for the browser's device view, shared by all tabs. */
+  customDevices: string[];
+  /** Devices on the device view's quick bar (preset keys or "WxH"); the rest live in its dialog. */
+  quickDevices: string[];
   layout: SpaceView & {
     activeProjectId: string | null;
     terms: TermSnapshot[];
@@ -267,7 +279,8 @@ export const api = {
   aiListModels: (cfg: AiCfg) => invoke<string[]>("ai_list_models", { cfg }),
 
   // Embedded browser: a native child webview the frontend positions over the Browser tab's body.
-  browserOpen: (a: { id: string; url: string; x: number; y: number; w: number; h: number; userAgent?: string }) =>
+  // Ids: the tab id, or `<tabId>/<device>` for device-view panes.
+  browserOpen: (a: { id: string; url: string; x: number; y: number; w: number; h: number; userAgent?: string; zoom?: number }) =>
     invoke("browser_open", a),
   browserBounds: (id: string, x: number, y: number, w: number, h: number) => invoke("browser_bounds", { id, x, y, w, h }),
   browserNavigate: (id: string, url: string) => invoke("browser_navigate", { id, url }),
@@ -276,6 +289,23 @@ export const api = {
   browserClose: (id: string) => invoke("browser_close", { id }),
   browserDevtools: (id: string) => invoke("browser_devtools", { id }),
   browserZoom: (id: string, factor: number) => invoke("browser_zoom", { id, factor }),
+  /** Runs a string-returning script in each page (see lib/picker); null where it failed. */
+  browserQuery: (ids: string[], js: string) => invoke<(string | null)[]>("browser_query", { ids, js }),
+  /** Captures to a PNG under app data and returns its path. Rect in points (CSS px × zoom). */
+  browserSnapshot: (id: string, x: number, y: number, w: number, h: number) => invoke<string>("browser_snapshot", { id, x, y, w, h }),
+  /** The visible page as a PNG data URL (shown in place of the webview under popovers). */
+  browserStill: (id: string) => invoke<string>("browser_still", { id }),
+  browserFullpage: (id: string) => invoke<string>("browser_fullpage", { id }),
+  /** Copies a capture to the Desktop; returns the new path. */
+  browserSaveShot: (src: string) => invoke<string>("browser_save_shot", { src }),
+  /** Moves the tab's page into its own window; `browser:docked` fires when it comes back. */
+  browserPopout: (id: string, url: string, zoom: number, theme: string, devices: string[], sync: boolean) =>
+    invoke("browser_popout", { id, url, zoom, theme, devices, sync }),
+  browserDock: (id: string) => invoke("browser_dock", { id }),
+  /** Chromium-family browser profiles with a cookie DB on this Mac. */
+  cookieSources: () => invoke<CookieSource[]>("cookie_sources"),
+  /** Copies a profile's cookies (one site's when `host` is set) into the embedded browser; returns the count. */
+  cookieImport: (browser: string, profile: string, host?: string) => invoke<number>("cookie_import", { browser, profile, host }),
   /** Site favicon as a data URL (page's <link rel=icon>, else /favicon.ico), or null. */
   browserFavicon: (url: string) => invoke<string | null>("browser_favicon", { url }),
 };

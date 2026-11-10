@@ -76,6 +76,7 @@ interface State {
   ports: PortInfo[]; // listening TCP ports (lib/ports)
   toast: string | null;
   overlays: number; // open popovers/menus; the embedded browser webview hides while any are up
+  popped: Record<string, true>; // browser tab id → its page is in a pop-out window (not persisted)
 }
 
 /** Exited non-zero on its own (a user Stop is not a failure). */
@@ -85,6 +86,8 @@ const DEFAULT_CONFIG: Config = {
   projects: [],
   scripts: {},
   browserHistory: [],
+  customDevices: [],
+  quickDevices: ["iphone", "pixel", "ipad", "laptop", "desktop"],
   settings: {
     theme: "dark",
     uiFont: "System",
@@ -125,6 +128,7 @@ export const useStore = create<State>(() => ({
   ports: [],
   toast: null,
   overlays: 0,
+  popped: {},
 }));
 
 /** Floating UI (popovers, menus) bumps this so the native browser webview hides under it. */
@@ -257,6 +261,8 @@ function normalize(raw: Partial<Config> | null): Config {
     projects: raw?.projects ?? [],
     scripts: raw?.scripts ?? {},
     browserHistory: (raw?.browserHistory ?? []).slice(0, 100),
+    customDevices: raw?.customDevices ?? [],
+    quickDevices: raw?.quickDevices ?? d.quickDevices,
     settings: { ...d.settings, ...raw?.settings, ai: migrateAi(raw?.settings?.ai) },
     layout: { ...d.layout, ...raw?.layout },
   };
@@ -725,6 +731,32 @@ export function setBrowserUrl(id: string, url: string) {
   });
 }
 
+/** Moves a browser tab's page into its own window. */
+export async function popOutBrowser(id: string, url: string, zoom: number, devices: string[] = [], sync = false) {
+  set((s) => ({ popped: { ...s.popped, [id]: true } }));
+  try {
+    await api.browserPopout(id, url, zoom, document.documentElement.dataset.theme ?? "dark", devices, sync);
+  } catch (e) {
+    set((s) => ({ popped: omit(s.popped, id) }));
+    notify(`Pop out failed: ${e}`);
+  }
+}
+const omit = <T,>(o: Record<string, T>, k: string) => Object.fromEntries(Object.entries(o).filter(([x]) => x !== k));
+
+/** Device-view settings of a browser tab. */
+export function patchBrowserTab(id: string, patch: { deviceView?: boolean; devices?: string[]; sync?: boolean }) {
+  updateConfig((c) => {
+    const t = c.layout.tabs.find((x) => x.id === id);
+    if (t?.kind === "browser") Object.assign(t, patch);
+  });
+}
+
+/** Running agent terminals in the active space (targets for "Send to agent"). */
+export function spaceAgents(): Term[] {
+  const space = activeSpace();
+  return Object.values(get().terms).filter((t) => t.agent && t.sessionId && t.status === "running" && space && spaceOfPath(t.cwd)?.id === space.id);
+}
+
 /** Records a visited page in the browser's new-tab history (newest first, deduped, capped). */
 export function recordBrowserHistory(url: string) {
   if (!/^https?:/i.test(url)) return;
@@ -743,6 +775,27 @@ export function renameHistory(url: string, title: string) {
 }
 export function removeHistory(url: string) {
   updateConfig((c) => void (c.browserHistory = c.browserHistory.filter((h) => h.url !== url)));
+}
+
+/** Saves a custom device size ("WxH") for every tab's device view. */
+export function addCustomDevice(key: string) {
+  updateConfig((c) => void (c.customDevices.includes(key) || c.customDevices.push(key)));
+}
+
+/** Adds a device to the device view's quick bar, or takes it off. */
+export function toggleQuickDevice(key: string) {
+  updateConfig((c) => void (c.quickDevices = c.quickDevices.includes(key) ? c.quickDevices.filter((k) => k !== key) : [...c.quickDevices, key]));
+}
+
+/** Deletes a saved custom size and drops it from the quick bar and every browser tab showing it. */
+export function removeCustomDevice(key: string) {
+  updateConfig((c) => {
+    c.customDevices = c.customDevices.filter((k) => k !== key);
+    c.quickDevices = c.quickDevices.filter((k) => k !== key);
+    for (const t of [...c.layout.tabs, ...Object.values(c.layout.views).flatMap((v) => v.tabs)]) {
+      if (t.kind === "browser" && t.devices?.includes(key)) t.devices = t.devices.filter((k) => k !== key);
+    }
+  });
 }
 
 function findSpace(c: Config, spaceId: string) {
@@ -964,5 +1017,6 @@ export async function boot() {
   listen<string>("menu", (e) => onMenu(e.payload));
   listen("quit-requested", onQuitRequested);
   listen<string>("notification-clicked", (e) => focusTerminal(e.payload));
+  listen<string>("browser:docked", (e) => set((s) => ({ popped: omit(s.popped, e.payload) })));
 }
 

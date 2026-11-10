@@ -7,6 +7,7 @@ import App from "./App";
 import { boot, notify } from "./store";
 import { installTooltips } from "./lib/tooltips";
 import { popupMenu } from "./lib/menu";
+import { BrowserPopout } from "./components/BrowserView";
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 
@@ -30,10 +31,26 @@ if (!isTauri()) {
     popupMenu(t?.closest("input, textarea") ? ["Cut", "Copy", "Paste", "-", "SelectAll"] : ["Copy"]);
   });
   installTooltips();
-  boot().catch((e) => notify(`Startup failed: ${e}`));
-  root.render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>,
-  );
+  const q = new URLSearchParams(location.search);
+  const popout = q.get("popout");
+  if (popout) {
+    // A browser tab's pop-out window: just its toolbar over the moved webview, no app state.
+    document.documentElement.dataset.theme = q.get("theme") === "light" ? "light" : "dark";
+    root.render(
+      <BrowserPopout
+        id={popout}
+        url={q.get("url") ?? "about:blank"}
+        zoom={Number(q.get("zoom")) || 1}
+        devices={(q.get("devices") ?? "").split(",").filter(Boolean)}
+        sync={q.get("sync") === "1"}
+      />,
+    );
+  } else {
+    boot().catch((e) => notify(`Startup failed: ${e}`));
+    root.render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+  }
 }
