@@ -8,6 +8,7 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 ## Open
 
 - [ ] Add a "sleep" option to a space (suspend it) · ~TBD
+- [ ] Improve the Settings page · ~TBD
 - [ ] Browser tab: import logins (cookies) from Chrome/Arc/Brave/Edge/Dia for quick sign-in · ~TBD
 - [ ] Small workspaces for branching and doing work · ~TBD
 - [ ] Connect the website's feedback form: set `action` on the form in `docs/feedback.html` · ~TBD
@@ -28,3 +29,5 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 - [x] Browser tab: native webview tab that loads any site (address bar, back/forward/reload, zoom, devtools, real loading bar; `⇧⌘B`). New-tab page lists the space's dev servers (named after their script, renamable), per-space pinned links and recent pages, with real favicons. Cookie import from other browsers deferred. · v0.1.0 · 2026-11-10
 - [x] Launcher: hover `+` for a quick menu, click for a full "Open…" tab (terminal, browser, installed agents, dev servers, pins); the empty state shows the same page · v0.1.0 · 2026-11-10
 - [x] Settings → Coding agents: only installed agents in the `+` menu, each can be hidden · v0.1.0 · 2026-11-10
+- [x] New-tab page: rename servers, pins and recent pages; hide dev servers per space (e.g. a backend) · v0.1.0 · 2026-11-10
+- [x] Drag tabs to reorder · v0.1.0 · 2026-11-10

@@ -245,3 +245,13 @@ Added on top:
   (`settings.hiddenAgents`).
 
 Cookie import is not in this revision; it's back on the TODO list.
+
+### Follow-ups (2026-11-10)
+
+- One `LinkTile` for dev servers, pins and recent pages: rename by double-click, hover pencil or
+  right-click (`Space.serverNames`, `BrowserPin.title`, `BrowserHistoryEntry.title`).
+- Dev-server cards show running servers only; any can be hidden per space (`Space.hiddenServers`),
+  with "N hidden" to reveal and unhide them.
+- Recent: Pin to This Workspace, Remove from Recent.
+- Tabs reorder by dragging (pointer events, not HTML5 drag-and-drop, which Tauri's file-drop
+  handler can swallow).
