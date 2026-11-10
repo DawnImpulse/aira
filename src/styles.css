@@ -2227,3 +2227,42 @@ textarea {
   padding: 0;
   font-size: 13px;
 }
+
+/* Quick-open tile hover actions (rename, unpin/remove). */
+.tile-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+}
+.start-tile.pin:hover .tile-actions,
+.tile-actions:focus-within {
+  opacity: 1;
+}
+
+.dot.idle {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--faint, #6b6b75);
+  flex-shrink: 0;
+}
+
+.start-tile.dimmed {
+  opacity: 0.5;
+}
+.start-head-link {
+  margin-left: 10px;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* While a tab is being dragged to reorder. */
+body.tab-dragging,
+body.tab-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}

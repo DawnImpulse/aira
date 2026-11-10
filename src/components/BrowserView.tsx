@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, type BrowserPin, type Tab } from "../ipc";
-import { addPin, notify, recordBrowserHistory, removePin, renameServer, selectActiveSpace, setBrowserUrl, useStore } from "../store";
+import { addPin, notify, recordBrowserHistory, removeHistory, removePin, renameHistory, renamePin, renameServer, selectActiveSpace, setBrowserUrl, setServerHidden, useStore } from "../store";
 import { projectOfPort, termOfPort } from "../lib/ports";
 import { Icon, IconButton } from "./ui";
 import { popupMenu } from "../lib/menu";
@@ -203,93 +203,150 @@ function useWorkspaceSites() {
   const ports = useStore((s) => s.ports);
   const scripts = useStore((s) => s.config.scripts);
   const activeProjectId = useStore((s) => s.config.layout.activeProjectId);
+  const hidden = new Set(space?.hiddenServers ?? []);
+  // Running only: ports listening now that belong to this project.
   const servers = ports
     .filter((p) => !activeProjectId || projectOfPort(p) === activeProjectId)
     .map((p) => {
-      const script = termOfPort(p)?.scriptId;
-      const def = (script && scripts[script]?.name) || p.name || `localhost:${p.port}`;
-      return { url: `http://localhost:${p.port}`, name: space?.serverNames?.[String(p.port)] || def, port: p.port };
+      const scriptId = termOfPort(p)?.scriptId;
+      const def = (scriptId && scripts[scriptId]?.name) || p.name || `localhost:${p.port}`;
+      return { url: `http://localhost:${p.port}`, name: space?.serverNames?.[String(p.port)] || def, port: p.port, hidden: hidden.has(p.port) };
     })
-    .filter((v, i, a) => a.findIndex((x) => x.url === v.url) === i);
+    .filter((v, i, a) => a.findIndex((x) => x.port === v.port) === i);
   const pins: BrowserPin[] = space?.pins ?? [];
   return { space, servers, pins };
+}
+
+type MenuItem = { text: string; action: () => void } | "-";
+
+/** One quick-open tile: open on click; rename by double-click, the hover pencil or right-click. */
+function LinkTile({
+  url,
+  name,
+  sub,
+  live,
+  onOpen,
+  onRename,
+  onRemove,
+  removeLabel = "Remove",
+  removeIcon = "close",
+  dim = false,
+  extraMenu = [],
+}: {
+  url: string;
+  name: string;
+  sub: string;
+  live?: boolean;
+  onOpen: (url: string) => void;
+  onRename?: (name: string) => void;
+  onRemove?: () => void;
+  removeLabel?: string;
+  removeIcon?: string;
+  dim?: boolean;
+  extraMenu?: MenuItem[];
+}) {
+  const [editing, setEditing] = useState(false);
+  const subline = (
+    <span className="start-sub dim small ellipsis">
+      {live !== undefined && <span className={live ? "dot live" : "dot idle"} />}
+      {sub}
+    </span>
+  );
+  if (editing && onRename) {
+    return (
+      <div className="start-tile pin">
+        <div className="start-open">
+          <Favicon url={url} />
+          <input
+            className="inline-input"
+            autoFocus
+            defaultValue={name}
+            onFocus={(e) => e.target.select()}
+            onBlur={(e) => {
+              onRename(e.target.value);
+              setEditing(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") setEditing(false);
+            }}
+          />
+          {subline}
+        </div>
+      </div>
+    );
+  }
+  const menu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    popupMenu([
+      { text: "Open", action: () => onOpen(url) },
+      { text: "Open in System Browser", action: () => void openUrl(url).catch(() => {}) },
+      ...(onRename ? ["-" as const, { text: "Rename…", action: () => setEditing(true) }] : []),
+      ...extraMenu,
+      ...(onRemove ? ["-" as const, { text: removeLabel, action: onRemove }] : []),
+    ]);
+  };
+  return (
+    <div className={dim ? "start-tile pin dimmed" : "start-tile pin"} title={url} onContextMenu={menu}>
+      <button className="start-open" onClick={() => onOpen(url)} onDoubleClick={() => onRename && setEditing(true)}>
+        <Favicon url={url} />
+        <span className="start-title ellipsis">{name}</span>
+        {subline}
+      </button>
+      <span className="tile-actions">
+        {onRename && <IconButton icon="edit" title="Rename" size={14} onClick={() => setEditing(true)} />}
+        {onRemove && <IconButton icon={removeIcon} title={removeLabel} size={14} onClick={onRemove} />}
+      </span>
+    </div>
+  );
 }
 
 /** "This workspace": detected dev servers (named after their script, renamable) and per-workspace
  * pinned links. Shared by the browser new-tab page and the launcher tab. */
 export function WorkspaceLinks({ onOpen, editable = false }: { onOpen: (url: string) => void; editable?: boolean }) {
   const { space, servers, pins } = useWorkspaceSites();
-  const [renaming, setRenaming] = useState<number | null>(null);
-
-  const serverMenu = (e: React.MouseEvent, s: { url: string; port: number }) => {
-    e.preventDefault();
-    popupMenu([
-      { text: "Open", action: () => onOpen(s.url) },
-      { text: "Open in System Browser", action: () => void openUrl(s.url).catch(() => {}) },
-      ...(editable && space ? ["-" as const, { text: "Rename…", action: () => setRenaming(s.port) }] : []),
-    ]);
-  };
-  const pinMenu = (e: React.MouseEvent, p: BrowserPin) => {
-    e.preventDefault();
-    popupMenu([
-      { text: "Open", action: () => onOpen(p.url) },
-      { text: "Open in System Browser", action: () => void openUrl(p.url).catch(() => {}) },
-      ...(editable && space ? ["-" as const, { text: "Unpin", action: () => removePin(space.id, p.url) }] : []),
-    ]);
-  };
-
-  if (!editable && servers.length === 0 && pins.length === 0) return null;
+  const [showHidden, setShowHidden] = useState(false);
+  const hiddenCount = servers.filter((s) => s.hidden).length;
+  const shown = servers.filter((s) => !s.hidden || showHidden);
+  if (!editable && shown.length === 0 && pins.length === 0) return null;
   return (
     <section className="start-section">
-      <div className="start-head">This workspace{space ? ` · ${space.name}` : ""}</div>
-      {servers.length === 0 && pins.length === 0 && <p className="dim small">No running dev servers. Pin a quick link below.</p>}
-      <div className="start-grid">
-        {servers.map((s) =>
-          renaming === s.port ? (
-            <div key={s.url} className="start-tile pin">
-              <div className="start-open">
-                <Favicon url={s.url} />
-                <input
-                  className="inline-input"
-                  autoFocus
-                  defaultValue={s.name}
-                  onFocus={(e) => e.target.select()}
-                  onBlur={(e) => {
-                    if (space) renameServer(space.id, s.port, e.target.value);
-                    setRenaming(null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") e.currentTarget.blur();
-                    if (e.key === "Escape") setRenaming(null);
-                  }}
-                />
-                <span className="start-sub dim small">
-                  <span className="dot live" /> localhost:{s.port}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div key={s.url} className="start-tile pin" title={s.url} onContextMenu={(e) => serverMenu(e, s)}>
-              <button className="start-open" onClick={() => onOpen(s.url)} onDoubleClick={() => editable && setRenaming(s.port)}>
-                <Favicon url={s.url} />
-                <span className="start-title">{s.name}</span>
-                <span className="start-sub dim small">
-                  <span className="dot live" /> localhost:{s.port}
-                </span>
-              </button>
-              {editable && space && <IconButton icon="edit" title="Rename" size={14} className="pin-x" onClick={() => setRenaming(s.port)} />}
-            </div>
-          ),
+      <div className="start-head">
+        This workspace{space ? ` · ${space.name}` : ""}
+        {editable && hiddenCount > 0 && (
+          <button className="link-btn start-head-link" onClick={() => setShowHidden(!showHidden)}>
+            {showHidden ? "Done" : `${hiddenCount} hidden`}
+          </button>
         )}
+      </div>
+      {shown.length === 0 && pins.length === 0 && <p className="dim small">No running dev servers. Pin a quick link below.</p>}
+      <div className="start-grid">
+        {shown.map((s) => (
+          <LinkTile
+            key={s.url}
+            url={s.url}
+            name={s.name}
+            sub={`localhost:${s.port}`}
+            live
+            dim={s.hidden}
+            onOpen={onOpen}
+            onRename={editable && space ? (n) => renameServer(space.id, s.port, n) : undefined}
+            onRemove={editable && space ? () => setServerHidden(space.id, s.port, !s.hidden) : undefined}
+            removeLabel={s.hidden ? "Unhide" : "Hide"}
+            removeIcon={s.hidden ? "visibility" : "visibility_off"}
+          />
+        ))}
         {pins.map((p) => (
-          <div key={p.url} className="start-tile pin" title={p.url} onContextMenu={(e) => pinMenu(e, p)}>
-            <button className="start-open" onClick={() => onOpen(p.url)}>
-              <Favicon url={p.url} />
-              <span className="start-title">{p.title || hostOf(p.url)}</span>
-              <span className="start-sub dim small ellipsis">{labelOf(p.url)}</span>
-            </button>
-            {editable && space && <IconButton icon="close" title="Unpin" size={14} className="pin-x" onClick={() => removePin(space.id, p.url)} />}
-          </div>
+          <LinkTile
+            key={p.url}
+            url={p.url}
+            name={p.title || hostOf(p.url)}
+            sub={labelOf(p.url)}
+            onOpen={onOpen}
+            onRename={editable && space ? (n) => renamePin(space.id, p.url, n) : undefined}
+            onRemove={editable && space ? () => removePin(space.id, p.url) : undefined}
+            removeLabel="Unpin"
+          />
         ))}
       </div>
     </section>
@@ -322,10 +379,11 @@ export function PinInput() {
   );
 }
 
+
 /** Recently visited pages in the embedded browser. */
 export function RecentLinks({ onOpen }: { onOpen: (url: string) => void }) {
   const history = useStore((s) => s.config.browserHistory);
-  const { servers, pins } = useWorkspaceSites();
+  const { space, servers, pins } = useWorkspaceSites();
   // Skip what "This workspace" already shows: pages on a running server, and pinned URLs.
   const norm = (u: string) => u.replace(/\/+$/, "");
   const serverOrigins = new Set(servers.map((s) => originOf(s.url)));
@@ -337,11 +395,17 @@ export function RecentLinks({ onOpen }: { onOpen: (url: string) => void }) {
       <div className="start-head">Recent</div>
       <div className="start-grid">
         {recent.map((h) => (
-          <button key={h.url} className="start-tile" onClick={() => onOpen(h.url)} title={h.url}>
-            <Favicon url={h.url} />
-            <span className="start-title ellipsis">{hostOf(h.url)}</span>
-            <span className="start-sub dim small ellipsis">{labelOf(h.url)}</span>
-          </button>
+          <LinkTile
+            key={h.url}
+            url={h.url}
+            name={h.title || hostOf(h.url)}
+            sub={labelOf(h.url)}
+            onOpen={onOpen}
+            onRename={(n) => renameHistory(h.url, n)}
+            onRemove={() => removeHistory(h.url)}
+            removeLabel="Remove from Recent"
+            extraMenu={space ? ["-", { text: "Pin to This Workspace", action: () => addPin(space.id, h.url, h.title) }] : []}
+          />
         ))}
       </div>
     </section>

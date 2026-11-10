@@ -666,6 +666,18 @@ export function openFile(path: string, pinned = false) {
   if (replaced) disposeModel(replaced);
 }
 
+/** Moves tab `fromId` to `toId`'s position (drag to reorder). */
+export function moveTab(fromId: string, toId: string) {
+  updateConfig((c) => {
+    const t = c.layout.tabs;
+    const i = t.findIndex((x) => x.id === fromId);
+    const j = t.findIndex((x) => x.id === toId);
+    if (i < 0 || j < 0 || i === j) return;
+    const [tab] = t.splice(i, 1);
+    t.splice(j, 0, tab);
+  });
+}
+
 export function pinTab(id: string) {
   updateConfig((c) => {
     const t = c.layout.tabs.find((x) => x.id === id);
@@ -685,8 +697,20 @@ export function setBrowserUrl(id: string, url: string) {
 export function recordBrowserHistory(url: string) {
   if (!/^https?:/i.test(url)) return;
   updateConfig((c) => {
-    c.browserHistory = [{ url, ts: Date.now() }, ...(c.browserHistory ?? []).filter((h) => h.url !== url)].slice(0, 100);
+    const old = c.browserHistory?.find((h) => h.url === url);
+    c.browserHistory = [{ url, ts: Date.now(), title: old?.title }, ...(c.browserHistory ?? []).filter((h) => h.url !== url)].slice(0, 100);
   });
+}
+
+/** Custom name for a Recent entry (empty clears it). */
+export function renameHistory(url: string, title: string) {
+  updateConfig((c) => {
+    const h = c.browserHistory.find((x) => x.url === url);
+    if (h) h.title = title.trim() || undefined;
+  });
+}
+export function removeHistory(url: string) {
+  updateConfig((c) => void (c.browserHistory = c.browserHistory.filter((h) => h.url !== url)));
 }
 
 function findSpace(c: Config, spaceId: string) {
@@ -702,10 +726,26 @@ export function addPin(spaceId: string, url: string, title?: string) {
     if (!s.pins.some((p) => p.url === url)) s.pins.push({ url, title });
   });
 }
+export function renamePin(spaceId: string, url: string, title: string) {
+  updateConfig((c) => {
+    const p = findSpace(c, spaceId)?.pins?.find((x) => x.url === url);
+    if (p) p.title = title.trim() || undefined;
+  });
+}
 export function removePin(spaceId: string, url: string) {
   updateConfig((c) => {
     const s = findSpace(c, spaceId);
     if (s?.pins) s.pins = s.pins.filter((p) => p.url !== url);
+  });
+}
+
+/** Hide or unhide a detected dev server (by port) on this workspace's new-tab page. */
+export function setServerHidden(spaceId: string, port: number, hidden: boolean) {
+  updateConfig((c) => {
+    const s = findSpace(c, spaceId);
+    if (!s) return;
+    const rest = (s.hiddenServers ?? []).filter((p) => p !== port);
+    s.hiddenServers = hidden ? [...rest, port] : rest;
   });
 }
 

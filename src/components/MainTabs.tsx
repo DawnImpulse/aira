@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Tab } from "../ipc";
-import { activateTab, basename, closeTab, formatBytes, isFailed, isUnder, notify, openBrowserTab, openLauncherTab, pinTab, selectActiveSpace, useStore } from "../store";
+import { activateTab, basename, closeTab, formatBytes, isFailed, isUnder, moveTab, notify, openBrowserTab, openLauncherTab, pinTab, selectActiveSpace, useStore } from "../store";
 import { attach, newTerminal, renameTerm, restart, runScript, startSession, stop as stopTerm } from "../lib/terminals";
 import { AGENTS, availableAgents, type Agent } from "../lib/agents";
 import { fileIconUrl } from "../lib/icons";
@@ -72,11 +72,43 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
             ? "New…"
             : `${basename(tab.path)} (${tab.head ? "changes" : tab.staged ? "staged" : "working tree"})`;
 
+  // Drag to reorder (pointer events: Tauri's native file-drop handler can swallow HTML5 drag events).
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0 || (e.target as HTMLElement).closest(".tab-close, input")) return;
+    const startX = e.clientX;
+    let dragging = false;
+    const move = (ev: PointerEvent) => {
+      if (ev.buttons === 0) return up(); // released somewhere we didn't hear (e.g. over the browser webview)
+      if (!dragging && Math.abs(ev.clientX - startX) < 5) return;
+      dragging = true;
+      document.body.classList.add("tab-dragging");
+      const over = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest<HTMLElement>("[data-tab-id]");
+      const overId = over?.dataset.tabId;
+      if (!over || !overId || overId === tab.id) return;
+      // Only swap once the pointer passes the neighbour's middle, so unequal widths don't jitter.
+      const tabs = useStore.getState().config.layout.tabs;
+      const from = tabs.findIndex((t) => t.id === tab.id);
+      const to = tabs.findIndex((t) => t.id === overId);
+      const r = over.getBoundingClientRect();
+      const mid = r.left + r.width / 2;
+      if ((to > from && ev.clientX > mid) || (to < from && ev.clientX < mid)) moveTab(tab.id, overId);
+    };
+    function up() {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.classList.remove("tab-dragging");
+    }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
   return (
     <div
       role="tab"
       aria-selected={active}
+      data-tab-id={tab.id}
       className={cx("tab", active && "active", preview && "preview")}
+      onPointerDown={onPointerDown}
       onClick={() => activateTab(tab.id)}
       onAuxClick={(e) => e.button === 1 && closeTab(tab.id)}
       onContextMenu={(e) => {

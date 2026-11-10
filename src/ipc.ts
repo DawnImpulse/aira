@@ -36,6 +36,8 @@ export interface Space {
   pins?: BrowserPin[];
   /** Custom names for detected dev servers, keyed by port (default is the owning script's name). */
   serverNames?: Record<string, string>;
+  /** Detected dev-server ports hidden from the new-tab page (e.g. a backend API). */
+  hiddenServers?: number[];
 }
 
 export interface BrowserPin {
@@ -46,6 +48,8 @@ export interface BrowserPin {
 export interface BrowserHistoryEntry {
   url: string;
   ts: number;
+  /** Custom name, set by renaming the Recent tile. */
+  title?: string;
 }
 
 /** Material symbol name, a single emoji, or an absolute path to a png/svg inside the project. */
