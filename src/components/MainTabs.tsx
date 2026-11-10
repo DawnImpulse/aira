@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Tab } from "../ipc";
-import { activateTab, basename, closeTab, formatBytes, isFailed, isUnder, moveTab, notify, openBrowserTab, openLauncherTab, pinTab, selectActiveSpace, useStore } from "../store";
+import { activateTab, basename, closeTab, formatBytes, isFailed, isUnder, moveTab, notify, openBrowserTab, openLauncherTab, pinTab, selectActiveSpace, useStore, wakeSpace } from "../store";
 import { attach, newTerminal, renameTerm, restart, runScript, startSession, stop as stopTerm } from "../lib/terminals";
 import { AGENTS, availableAgents, type Agent } from "../lib/agents";
 import { fileIconUrl } from "../lib/icons";
@@ -13,6 +13,21 @@ export function MainTabs() {
   const tabs = useStore((s) => s.config.layout.tabs);
   const active = useStore((s) => s.config.layout.activeTab);
   const current = tabs.find((t) => t.id === active);
+  const space = useStore(selectActiveSpace);
+  const projectId = useStore((s) => s.config.layout.activeProjectId);
+  if (space?.asleep && projectId)
+    return (
+      <div className="main">
+        <div className="welcome">
+          <Icon name="bedtime" size={32} className="dim" />
+          <h2>{space.name} is asleep</h2>
+          <p className="dim">Its terminals and browser pages are stopped. Tabs are kept.</p>
+          <button className="btn primary" onClick={() => wakeSpace(projectId, space.id)}>
+            <Icon name="wb_sunny" /> Wake
+          </button>
+        </div>
+      </div>
+    );
   return (
     <div className="main">
       <div className="tabbar-wrap">

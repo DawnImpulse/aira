@@ -38,6 +38,8 @@ export interface Space {
   serverNames?: Record<string, string>;
   /** Detected dev-server ports hidden from the new-tab page (e.g. a backend API). */
   hiddenServers?: number[];
+  /** Asleep: its shells/agents are stopped and browser pages closed; tabs are kept for waking. */
+  asleep?: boolean;
 }
 
 export interface BrowserPin {

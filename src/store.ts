@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, type Config, type FileEntry, type GitStatus, type PortInfo, type Project, type Repo, type Script, type Space, type SpaceView, type Tab, type TermSnapshot, type UsageRow } from "./ipc";
 import { disposeModel, reloadIfClean, setEditorTheme } from "./lib/monaco";
-import { busyTerms, confirmKill, confirmScriptClose, newTerminal, removeTerm, runningList, setTerminalTheme, stop as stopTerm } from "./lib/terminals";
+import { busyTerms, confirmKill, confirmScriptClose, newTerminal, removeTerm, runningList, setTerminalTheme, sleepTerm, startSession, stop as stopTerm } from "./lib/terminals";
 import { nextIdentity } from "./lib/identity";
 import { AGENTS } from "./lib/agents";
 
@@ -422,7 +422,9 @@ export function setActiveSpace(projectId: string, spaceId?: string) {
   const l = get().config.layout;
   const sid = spaceId ?? (l.activeProjectId === projectId && p.spaces.some((s) => s.id === l.activeSpaceId) ? l.activeSpaceId : primarySpace(p)?.id) ?? null;
   // Selecting a space counts as seeing its finished agents.
-  const dir = p.spaces.find((s) => s.id === sid)?.dir;
+  const target = p.spaces.find((s) => s.id === sid);
+  if (target?.asleep) wakeSpace(projectId, target.id);
+  const dir = target?.dir;
   if (dir) markSeen(Object.values(get().terms).filter((t) => t.agent && spaceOfPath(t.cwd)?.dir === dir).map((t) => t.key));
   if (l.activeProjectId === projectId && l.activeSpaceId === sid) return;
   updateConfig((c) => showSpace(c, projectId, sid));
@@ -478,9 +480,7 @@ export async function removeSpace(projectId: string, spaceId: string) {
   const s = p?.spaces.find((x) => x.id === spaceId);
   if (!p || !s || s.dir === p.path) return; // the primary space can't be removed
   // Shells/agents in its window go with it (scripts keep running; reopen from the sidebar).
-  const l = get().config.layout;
-  const view = l.activeSpaceId === spaceId ? l : l.views[spaceId];
-  const doomed = (view?.tabs ?? []).flatMap((t) => (t.kind === "terminal" && !get().terms[t.key]?.scriptId ? [t.key] : []));
+  const doomed = spaceShells(spaceId);
   const busy = await busyTerms(doomed);
   const msg = `Remove space "${s.name}"? Its folder stays on disk.` + (busy.length ? `\n\nStill running, will be force closed:\n${runningList(busy)}` : "");
   if (!(await ask(msg, { title: "Remove space", kind: "warning", okLabel: busy.length ? "Force close & remove" : "Remove" }))) return;
@@ -493,6 +493,38 @@ export async function removeSpace(projectId: string, spaceId: string) {
     if (c.layout.activeSpaceId === spaceId) showSpace(c, projectId, primarySpace(x)?.id ?? null);
   });
   discover(projectId);
+}
+
+/** A space's tabs: the live layout when it's the active one, else its parked view. */
+const spaceTabs = (spaceId: string) => {
+  const l = get().config.layout;
+  return (l.activeSpaceId === spaceId ? l : l.views[spaceId])?.tabs ?? [];
+};
+/** Its shell/agent terminals (scripts are the project's, not the space's). */
+const spaceShells = (spaceId: string) => spaceTabs(spaceId).flatMap((t) => (t.kind === "terminal" && !get().terms[t.key]?.scriptId ? [t.key] : []));
+
+const setAsleep = (projectId: string, spaceId: string, asleep: boolean) =>
+  updateConfig((c) => {
+    const s = c.projects.find((x) => x.id === projectId)?.spaces.find((x) => x.id === spaceId);
+    if (s) s.asleep = asleep;
+  });
+
+/** Frees a space's CPU/RAM: stops its shells/agents and closes its browser pages; tabs stay for waking. */
+export async function sleepSpace(projectId: string, spaceId: string) {
+  const s = projectById(projectId)?.spaces.find((x) => x.id === spaceId);
+  if (!s || s.asleep) return;
+  const keys = spaceShells(spaceId);
+  const busy = await busyTerms(keys);
+  if (busy.length && !(await ask(`Put "${s.name}" to sleep?\n\nStill running, will be stopped:\n${runningList(busy)}`, { title: "Sleep space", kind: "warning", okLabel: "Stop & sleep" }))) return;
+  keys.forEach(sleepTerm);
+  for (const t of spaceTabs(spaceId)) if (t.kind === "browser") api.browserClose(t.id).catch(() => {});
+  setAsleep(projectId, spaceId, true);
+}
+
+/** Starts its terminals again; browser pages reopen when their tab is shown. */
+export function wakeSpace(projectId: string, spaceId: string) {
+  setAsleep(projectId, spaceId, false);
+  spaceShells(spaceId).forEach((k) => startSession(k));
 }
 
 export const toggleStar = (projectId: string, spaceId: string) =>

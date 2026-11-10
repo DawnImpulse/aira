@@ -198,7 +198,8 @@ function onExit(key: string, sessionId: string, code: number) {
   exitWaiters.delete(sessionId);
   const t = get().terms[key];
   if (!t || t.sessionId !== sessionId) return; // stale message from an earlier run
-  if (!t.scriptId && !t.command) return removeTerm(key, true); // plain shell exited (`exit`, Ctrl-D): close it like any terminal app
+  // Plain shell exited (`exit`, Ctrl-D): close it like any terminal app, unless its space went to sleep.
+  if (!t.scriptId && !t.command && !sleeping.delete(key)) return removeTerm(key, true);
   if (t.agent && t.status !== "stopping") notifyAgent(key, code === 0 ? "Exited" : `Exited with code ${code}`);
   const stopped = t.status === "stopping";
   xts.get(key)?.term.write(`\r\n\x1b[2m[${stopped ? "stopped" : `process exited with code ${code}`}]\x1b[0m\r\n`);
@@ -229,6 +230,14 @@ export async function restart(key: string, projectId?: string) {
 }
 
 const live = (t?: Term): t is Term => !!t?.sessionId && (t.status === "running" || t.status === "stopping");
+
+const sleeping = new Set<string>(); // shells stopped by a space going to sleep keep their tab
+/** Stops a terminal for a sleeping space; its tab stays so waking can start it again. */
+export function sleepTerm(key: string) {
+  if (!live(get().terms[key])) return;
+  sleeping.add(key);
+  stop(key);
+}
 
 /** Terminals among `keys` that are running something: a script/command/agent, or a shell with a foreground job. */
 export async function busyTerms(keys: string[]): Promise<Term[]> {

@@ -3,7 +3,7 @@ import { BorderBeam } from "border-beam";
 import { api, type GitStatus, type Project, type Space } from "../ipc";
 import {
   ago, discover, focusTerminal, isFailed, notify, openFolders, removeScript, removeSpace, repoOf, scriptsWindow,
-  setActiveSpace, spaceChanges, spaceOfPath, toggleCollapsed, toggleStar, toggleStartScript, updateConfig, updateProject, useStore,
+  setActiveSpace, sleepSpace, spaceChanges, spaceOfPath, toggleCollapsed, toggleStar, toggleStartScript, updateConfig, updateProject, useStore, wakeSpace,
   type AgentStatus, type SubAgentNode, type Term,
 } from "../store";
 import { restart, runScript, runStart, showScript, stop as stopTerm, stopAllScripts } from "../lib/terminals";
@@ -163,13 +163,14 @@ function SpaceCard({ project, space, showProject }: { project: Project; space: S
 
   const card = (
     <div
-      className={cx("space-card", selected && "selected", finishedUnseen && "agent-done")}
+      className={cx("space-card", selected && "selected", finishedUnseen && "agent-done", space.asleep && "asleep")}
       onClick={() => setActiveSpace(project.id, space.id)}
-      title={finishedUnseen ? `${space.dir}\nAn agent finished here — click to view` : space.dir}
+      title={finishedUnseen ? `${space.dir}\nAn agent finished here — click to view` : space.asleep ? `${space.dir}\nAsleep — click to wake` : space.dir}
       role="button"
       aria-pressed={selected}
     >
       <div className="card-row">
+        {space.asleep && <Icon name="bedtime" size={13} className="dim" title="Asleep" />}
         <span className="card-title">{space.name}</span>
         {showProject && (
           <span className="space-project">
@@ -179,6 +180,11 @@ function SpaceCard({ project, space, showProject }: { project: Project; space: S
         {(running || failed) && <span className={cx("dot", running ? "green" : "red")} title={running ? "Scripts running" : "A script failed"} />}
         <span className="spacer" />
         <span className="hover-actions">
+          {space.asleep ? (
+            <IconButton icon="wb_sunny" title="Wake (start its terminals again)" size={14} onClick={stop(() => wakeSpace(project.id, space.id))} />
+          ) : (
+            <IconButton icon="bedtime" title="Sleep (stop its terminals and browser pages, keep tabs)" size={14} onClick={stop(() => sleepSpace(project.id, space.id))} />
+          )}
           <IconButton icon="settings" title="Space settings" size={14} onClick={stop(() => openSpaceDialog(project.id, space.id))} />
           {!isPrimary && <IconButton icon="close" title="Remove space" size={14} onClick={stop(() => removeSpace(project.id, space.id))} />}
         </span>

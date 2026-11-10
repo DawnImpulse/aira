@@ -1202,6 +1202,75 @@ textarea {
   align-items: flex-start;
   color: var(--dim);
 }
+/* Settings: section nav on the left, fixed height so switching sections doesn't resize the dialog. */
+.settings {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 18px;
+  height: min(520px, calc(100vh - 140px));
+}
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-nav button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--dim);
+  text-align: left;
+  cursor: pointer;
+}
+.settings-nav button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.settings-nav button.on {
+  background: var(--elev);
+  color: var(--text);
+}
+.settings-pane {
+  min-width: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+.agent-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 12px;
+}
+.agent-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.agent-opt:hover {
+  background: var(--hover);
+}
+.agent-opt .ellipsis {
+  flex: 1;
+}
+.agent-opt.off {
+  cursor: default;
+}
+.agent-opt.off > :not(.dim) {
+  opacity: 0.5;
+}
+.settings-pane h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
 .section-title {
   margin-top: 6px;
   padding-top: 14px;
@@ -1286,6 +1355,9 @@ textarea {
 }
 .space-card .card-row .hover-actions {
   margin-right: -2px;
+}
+.space-card.asleep .card-title {
+  color: var(--dim);
 }
 .star {
   display: grid;
