@@ -175,6 +175,7 @@
           <li><b>Space settings</b>: a name and a folder, inside the project or outside it.</li>
           <li><b>Add a nested space</b> by right-clicking a folder in the file tree.</li>
           <li><b>Star a space</b> to keep it in the Spaces tab with starred spaces from other projects.</li>
+          <li><b>Sleep a space</b> (the moon on its card) to stop its terminals and agents and close its browser pages. Its tabs stay. Click the space or <b>Wake</b> to start them again. Scripts keep running.</li>
           <li><b>Remove project</b> and <b>Remove space</b> only take them out of Aira. Files on disk are not touched.</li>
         </ul>
       </section>
@@ -256,7 +257,7 @@
 
       <section id="ai" aria-labelledby="ai-h">
         <h2 id="ai-h">AI commit messages</h2>
-        <p>Choose a provider under <b>AI (commit messages)</b> in Settings. Nothing is sent until you press Generate. API keys are kept in the macOS Keychain, one entry per provider, and never in Aira's config or logs. Providers marked below ask once, before the first diff is sent (“Send diff”). <a href="https://github.com/DawnImpulse/aira/blob/main/docs/ai-providers.md">How each provider was reviewed</a>.</p>
+        <p>Choose a provider under <b>Commit messages</b> in Settings. Nothing is sent until you press Generate. API keys are kept in the macOS Keychain, one entry per provider, and never in Aira's config or logs. Providers marked below ask once, before the first diff is sent (“Send diff”). <a href="https://github.com/DawnImpulse/aira/blob/main/docs/ai-providers.md">How each provider was reviewed</a>.</p>
         <div class="table" role="region" aria-label="AI providers" tabindex="0">
           <table>
             <thead><tr><th scope="col">Provider</th><th scope="col">Kind</th><th scope="col">Needs</th><th scope="col">Asks before first send</th></tr></thead>
@@ -294,19 +295,19 @@
 
       <section id="settings" aria-labelledby="settings-h">
         <h2 id="settings-h">Settings</h2>
-        <p>Open with <kbd>⌘</kbd><kbd>,</kbd>.</p>
+        <p>Open with <kbd>⌘</kbd><kbd>,</kbd>. Four sections: Appearance, Coding agents, Commit messages and Shortcuts.</p>
         <div class="table" role="region" aria-label="Settings and defaults" tabindex="0">
           <table>
             <thead><tr><th scope="col">Setting</th><th scope="col">Options</th><th scope="col">Default</th></tr></thead>
             <tbody>
               <tr><th scope="row">Theme</th><td>Dark, Light, System</td><td>Dark</td></tr>
               <tr><th scope="row">Interface font</th><td>Any installed font</td><td>System</td></tr>
-              <tr><th scope="row">Editor &amp; terminal font</th><td>Any installed font; unknown names fall back to SF Mono</td><td>SF Mono</td></tr>
+              <tr><th scope="row">Editor &amp; terminal font</th><td>Any installed monospace font</td><td>SF Mono</td></tr>
               <tr><th scope="row">Size</th><td>9 to 28</td><td>13</td></tr>
               <tr><th scope="row">Agent notifications</th><td>When a coding agent finishes, needs input or exits, and you aren't looking at it</td><td>On</td></tr>
               <tr><th scope="row">Coding agents</th><td>Show or hide each installed agent in the + menu; agents that aren't installed stay hidden</td><td>Every installed agent shown</td></tr>
               <tr><th scope="row">GPU (WebGL) terminal rendering</th><td>Faster for heavy output; turn off if terminals render blank</td><td>Off</td></tr>
-              <tr><th scope="row">AI (commit messages)</th><td>Provider, model, server address and API key, depending on the provider</td><td>Anthropic</td></tr>
+              <tr><th scope="row">Commit messages</th><td>Provider, model, server address and API key, depending on the provider</td><td>Anthropic</td></tr>
             </tbody>
           </table>
         </div>
@@ -324,6 +325,7 @@
               <tr><th scope="row">Close a terminal with something running</th><td><b>Force close</b> or <b>Cancel</b></td></tr>
               <tr><th scope="row">Free a port held by another process</th><td><b>Force close</b> or <b>Cancel</b></td></tr>
               <tr><th scope="row">Remove a project or a space</th><td><b>Remove</b>, or <b>Force close &amp; remove</b> if something is running</td></tr>
+              <tr><th scope="row">Sleep a space with something running</th><td><b>Stop &amp; sleep</b> or <b>Cancel</b></td></tr>
               <tr><th scope="row">Close a file with unsaved changes</th><td><b>Discard</b></td></tr>
               <tr><th scope="row">Delete a script</th><td><b>Delete</b></td></tr>
               <tr><th scope="row">Roll back files to HEAD</th><td><b>Rollback</b></td></tr>

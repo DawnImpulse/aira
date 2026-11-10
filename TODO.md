@@ -7,9 +7,9 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 
 ## Open
 
-- [ ] Add a "sleep" option to a space (suspend it) · ~TBD
-- [ ] Improve the Settings page · ~TBD
 - [ ] Browser tab: select an element (div) on the page and attach it to an agent chat · ~TBD
+- [ ] Browser tab: device views (mobile, tablet, desktop presets plus custom sizes, several side by side), replacing responsive-preview apps like Sizzy/Polypane · ~TBD
+- [ ] Browser tab: pop out into its own window (and back into a tab) · ~TBD
 - [ ] Browser tab: import logins (cookies) from Chrome/Arc/Brave/Edge/Dia for quick sign-in · ~TBD
 - [ ] Small workspaces for branching and doing work · ~TBD
 - [ ] Connect the website's feedback form: set `action` on the form in `docs/feedback.html` · ~TBD
@@ -32,3 +32,5 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 - [x] Settings → Coding agents: only installed agents in the `+` menu, each can be hidden · v0.1.0 · 2026-11-10
 - [x] New-tab page: rename servers, pins and recent pages; hide dev servers per space (e.g. a backend) · v0.1.0 · 2026-11-10
 - [x] Drag tabs to reorder · v0.1.0 · 2026-11-10
+- [x] Sleep a space: stops its shells/agents and closes its browser pages, keeps tabs; click or Wake starts them again · v0.1.0 · 2026-11-10
+- [x] Settings split into sections (Appearance, Coding agents, Commit messages, Shortcuts) with a side nav · v0.1.0 · 2026-11-10
