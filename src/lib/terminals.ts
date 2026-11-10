@@ -84,6 +84,7 @@ function xterm(key: string): XT {
   };
   term.onData((d) => {
     lastIn.set(key, Date.now());
+    if (d === "\x03" || d === "\x1b") interrupted(key); // Ctrl+C / Esc
     const id = live();
     if (id) api.ptyWrite(id, d).catch(() => {});
   });
@@ -383,8 +384,13 @@ setInterval(() => {
     const inp = lastIn.get(t.key);
     const state = inp !== undefined && now - out < 1500 && out - inp > 500 ? "working" : "idle";
     const prev = agentStatus[t.key];
+    const cut = interruptedAt.has(t.key);
+    if (cut && state === "idle") {
+      interruptedAt.delete(t.key);
+      endSubagents(t.key, now); // an interrupted turn sends no SubagentStop either
+    }
     if (prev?.state !== state) {
-      const finished = prev?.state === "working" && state === "idle";
+      const finished = prev?.state === "working" && state === "idle" && !cut; // an interrupt isn't "finished"
       put(t.key, { state, since: now, everWorked: !!prev?.everWorked || state === "working", unseen: finished ? !watching(t.key) : state === "working" ? false : prev?.unseen });
       if (finished && now - prev.since >= 4000) notifyAgent(t.key, "Finished – waiting for you");
     }
@@ -476,6 +482,32 @@ async function ensureRepoHooks(t: Term, a: Agent): Promise<boolean> {
   return r === "on";
 }
 
+const interruptedAt = new Map<string, number>(); // terminals handed back to the heuristic by Ctrl+C / Esc
+
+/**
+ * Ctrl+C / Esc may interrupt the agent's turn, and agents don't send their turn-end hook then (Claude
+ * Code skips `Stop` on a user interrupt), which left status stuck on Working. Not every Esc/Ctrl+C
+ * interrupts (closing autocomplete, clearing typed text), so instead of forcing idle, hand status back
+ * to the activity heuristic: a spinner that keeps going stays Working, a quiet terminal goes idle. The
+ * next status hook (prompt/stop/waiting) switches exact status back on.
+ */
+function interrupted(key: string) {
+  if (hookActive.delete(key)) interruptedAt.set(key, Date.now());
+}
+
+/** Marks a terminal's still-running subagents as ended (its turn was cut short). */
+function endSubagents(key: string, now: number) {
+  const h = hookState.get(key);
+  if (!h) return;
+  h.pending = [];
+  for (const n of h.nodes.values()) {
+    if (!n.running) continue;
+    n.running = false;
+    n.endedAt = now;
+  }
+  useStore.setState((s) => ({ subagents: { ...s.subagents, [key]: [...h.nodes.values()] } }));
+}
+
 function forgetHooks(key: string) {
   if (!hooked.delete(key)) return;
   hookActive.delete(key);
@@ -491,6 +523,9 @@ function forgetHooks(key: string) {
 
 // ---------- Claude Code usage: tokens from the session transcript ----------
 
+// ponytail: usage hidden for now (user's call, 2026-11-10): transcripts aren't read, so no token/cost
+// labels render anywhere. Flip to true to bring it back.
+const SHOW_USAGE = false;
 const transcripts = new Map<string, string>(); // term key → transcript_path from hook payloads
 
 /** The transcript lags the hooks, so re-read 2s after a turn ends and again when the next one starts. */
@@ -529,13 +564,18 @@ async function pollHooks(key: string) {
 export function applyHookEvents(key: string, events: HookEvent[]) {
   const agent = get().terms[key]?.agent ?? "";
   const exact = !!agentById(agent)?.exactStatus; // else hooks only feed subagents; status stays heuristic
-  if (exact) hookActive.add(key);
   const h = hookState.get(key) ?? emptyTree();
   hookState.set(key, h);
   const now = Date.now();
   const evs = events.flatMap((e) => normalize(agent, e as HookEvent & Record<string, unknown>));
   const main = fold(h, evs, now);
-  trackUsage(key, events, evs);
+  // Exact status takes over only on a status event, so a stray tool event after an interrupt doesn't
+  // pin the old Working back on.
+  if (exact && main) {
+    hookActive.add(key);
+    interruptedAt.delete(key);
+  }
+  if (SHOW_USAGE) trackUsage(key, events, evs);
   useStore.setState((s) => ({ subagents: { ...s.subagents, [key]: [...h.nodes.values()] } }));
   if (!main || !exact) return;
   const prev = get().agentStatus[key];
