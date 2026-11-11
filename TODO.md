@@ -8,7 +8,6 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 ## Open
 
 - [ ] Small workspaces for branching and doing work · ~TBD
-- [ ] Connect the website's feedback form: set `action` on the form in `docs/feedback.html` · ~TBD
 - [ ] Check the website's videos in Safari and on a phone once it's live · ~TBD
 - [ ] Mac application deploy · ~TBD
 - [ ] Register the website with Google Search Console and Bing Webmaster Tools, submit the sitemap · ~TBD
@@ -16,6 +15,7 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 ## Done
 
 <!-- - [x] What · vX.Y.Z · YYYY-MM-DD -->
+- [x] Connect the website's feedback form to horm (horm.codevry.com) · 2026-11-11
 - [x] Browser tab: capture an element, region or full page and paste selector + PNG into an agent's terminal · v0.1.0 · 2026-11-10
 - [x] Browser tab: pop out a page or device view into its own window and dock it back · v0.1.0 · 2026-11-10
 - [x] Browser tab: import cookies from Chrome/Arc/Brave/Edge/Dia/Chromium/Vivaldi/Opera (all or one site) · v0.1.0 · 2026-11-10
