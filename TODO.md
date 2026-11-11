@@ -7,11 +7,7 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 
 ## Open
 
-- [ ] Browser tab: select an element (div) on the page and attach it to an agent chat · ~TBD
-- [ ] Browser tab: pop out into its own window (and back into a tab) · ~TBD
-- [ ] Browser tab: import logins (cookies) from Chrome/Arc/Brave/Edge/Dia for quick sign-in · ~TBD
 - [ ] Small workspaces for branching and doing work · ~TBD
-- [ ] Connect the website's feedback form: set `action` on the form in `docs/feedback.html` · ~TBD
 - [ ] Check the website's videos in Safari and on a phone once it's live · ~TBD
 - [ ] Mac application deploy · ~TBD
 - [ ] Register the website with Google Search Console and Bing Webmaster Tools, submit the sitemap · ~TBD
@@ -19,6 +15,10 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 ## Done
 
 <!-- - [x] What · vX.Y.Z · YYYY-MM-DD -->
+- [x] Connect the website's feedback form to horm (horm.codevry.com) · 2026-11-11
+- [x] Browser tab: capture an element, region or full page and paste selector + PNG into an agent's terminal · v0.1.0 · 2026-11-10
+- [x] Browser tab: pop out a page or device view into its own window and dock it back · v0.1.0 · 2026-11-10
+- [x] Browser tab: import cookies from Chrome/Arc/Brave/Edge/Dia/Chromium/Vivaldi/Opera (all or one site) · v0.1.0 · 2026-11-10
 - [x] Browser tab: device views (25 presets + saved custom sizes, side by side, sync, zoom, pop-out) · v0.1.0 · 2026-11-10
 - [x] Rename the GitHub repo to `aira` (site links updated) · 2026-10-02
 - [x] Publish the website on Vercel at aira.codevry.com (README links updated) · 2026-10-02
@@ -27,7 +27,7 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 - [x] Fix the right-click context menu (no more WebKit menu; terminal Copy/Paste/Select All/Clear) · v0.1.0 · 2026-11-09
 - [x] Bar usage of AI agent: tokens and API-equivalent cost per Claude Code terminal (sidebar + Terminals popover) · v0.1.0 · 2026-11-09
 - [x] Notification support: click a banner to focus the terminal, Dock badge, status-bar bell with recent events ("Terminal" as sender is dev-only until an Aira.app is built) · v0.1.0 · 2026-11-09
-- [x] Browser tab: native webview tab that loads any site (address bar, back/forward/reload, zoom, devtools, real loading bar; `⇧⌘B`). New-tab page lists the space's dev servers (named after their script, renamable), per-space pinned links and recent pages, with real favicons. Cookie import from other browsers deferred. · v0.1.0 · 2026-11-10
+- [x] Browser tab: native webview tab that loads any site (address bar, back/forward/reload, zoom, devtools, real loading bar; `⇧⌘B`). New-tab page lists the space's dev servers (named after their script, renamable), per-space pinned links and recent pages, with real favicons. · v0.1.0 · 2026-11-10
 - [x] Launcher: hover `+` for a quick menu, click for a full "Open…" tab (terminal, browser, installed agents, dev servers, pins); the empty state shows the same page · v0.1.0 · 2026-11-10
 - [x] Settings → Coding agents: only installed agents in the `+` menu, each can be hidden · v0.1.0 · 2026-11-10
 - [x] New-tab page: rename servers, pins and recent pages; hide dev servers per space (e.g. a backend) · v0.1.0 · 2026-11-10
