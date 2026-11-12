@@ -272,7 +272,7 @@ export const formatPrice = (cents: number, currency = "USD") =>
         return null;
       case "agent_setup":
         if (a.agent === "claude") window.__claudeKey = a.key;
-        return { args: a.agent === "claude" ? ["--settings", "~/Library/Application Support/com.codevry.ide/claude-hooks.json"] : [], env: { IDE_AGENT_EVENTS: `/tmp/agent-events/${a.key}` } };
+        return { args: a.agent === "claude" ? ["--settings", "~/Library/Application Support/com.codevry.aira/claude-hooks.json"] : [], env: { IDE_AGENT_EVENTS: `/tmp/agent-events/${a.key}` } };
       case "agent_repo_hooks":
         return a.enable ? "on" : "off";
       case "agent_events":
@@ -388,7 +388,7 @@ export const formatPrice = (cents: number, currency = "USD") =>
         return null;
       case "browser_snapshot":
       case "browser_fullpage":
-        return "/Users/dev/Library/Application Support/com.codevry.ide/screenshots/1762790400000.png";
+        return "/Users/dev/Library/Application Support/com.codevry.aira/screenshots/1762790400000.png";
       case "browser_save_shot":
         return "/Users/dev/Desktop/Aira 2026-11-10 at 10.42.07.png";
       case "cookie_sources":
@@ -400,6 +400,8 @@ export const formatPrice = (cents: number, currency = "USD") =>
         ];
       case "cookie_import":
         return a.host ? 23 : 1874;
+      case "plugin:app|version":
+        return "0.1.0";
       default:
         return null;
     }

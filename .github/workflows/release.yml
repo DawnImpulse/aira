@@ -1,0 +1,53 @@
+# Signed, notarized universal DMG on every version bump. Runs on each push to main; builds only when
+# no release exists yet for the version in src-tauri/tauri.conf.json, so merges without a bump are no-ops.
+# Secrets: APPLE_CERTIFICATE (base64 .p12), APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+# APPLE_ID, APPLE_PASSWORD (app-specific), APPLE_TEAM_ID. Tauri's CLI reads them and signs + notarizes.
+name: Release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: release
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          V=$(jq -r .version src-tauri/tauri.conf.json)
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          if gh release view "v$V" >/dev/null 2>&1; then echo "v$V already released, skipping"; echo "skip=1" >> "$GITHUB_OUTPUT"; fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - if: ${{ !steps.v.outputs.skip }}
+        run: test -n "$APPLE_CERTIFICATE" || { echo "::error::APPLE_* secrets not set; refusing to publish an unsigned build"; exit 1; }
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      - if: ${{ !steps.v.outputs.skip }}
+        uses: oven-sh/setup-bun@v2
+      - if: ${{ !steps.v.outputs.skip }}
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - if: ${{ !steps.v.outputs.skip }}
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - if: ${{ !steps.v.outputs.skip }}
+        run: bun install && bun tauri build --target universal-apple-darwin
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEYCHAIN_PASSWORD: ${{ github.run_id }}
+      - if: ${{ !steps.v.outputs.skip }}
+        run: gh release create "v$V" src-tauri/target/universal-apple-darwin/release/bundle/dmg/Aira_*.dmg --target "$GITHUB_SHA" --title "Aira v$V" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.v.outputs.version }}

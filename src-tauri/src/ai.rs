@@ -11,7 +11,7 @@ use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
-const SERVICE: &str = "com.codevry.ide";
+const SERVICE: &str = "com.codevry.aira";
 const MAX_DIFF: usize = 60_000;
 const SYSTEM: &str = "You write git commit messages. Reply with the commit message only: \
 a concise imperative subject line (max 72 chars), then optionally a blank line and a short \
@@ -402,10 +402,10 @@ mod tests {
     #[test]
     #[ignore]
     fn keychain_roundtrip() {
-        let e = keyring::Entry::new("com.codevry.ide.selftest", "probe").unwrap();
+        let e = keyring::Entry::new("com.codevry.aira.selftest", "probe").unwrap();
         e.set_password("not-a-real-key").unwrap();
         let found = std::process::Command::new("security")
-            .args(["find-generic-password", "-s", "com.codevry.ide.selftest", "-a", "probe"])
+            .args(["find-generic-password", "-s", "com.codevry.aira.selftest", "-a", "probe"])
             .output()
             .unwrap();
         assert!(found.status.success(), "entry not visible to `security`");
