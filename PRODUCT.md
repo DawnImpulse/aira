@@ -32,11 +32,11 @@ Many projects live at once. Every project's dev servers, agents and git stay run
 - Light editor: Monaco without language servers. Aira does not try to replace a full IDE's code intelligence.
 - Open source under the MIT license.
 - Shipped today: per-project color and icon; spaces with their own tabs and panels; hook-based agent status with nested subagents for Claude Code; per-project scripts windows with a Start set and a restart offer after quit; a commit panel across nested repos and worktrees, one repository per commit; AI commit messages from cloud, local or CLI providers; ports and per-terminal memory in the status bar; dark, light and system themes.
-- Early preview (v0.1.0). No signed release yet; users build from source.
+- Early preview (v0.1.0). Signed, notarized universal DMG per version bump via GitHub Actions (`.github/workflows/release.yml`); the site's Download button resolves the latest release. Building from source stays documented.
 
 ## Brand Commitments
 
-- Name: Aira, pronounced “aye-ra” (renamed from "IDE" on 2026-10-02; the bundle identifier stays `com.codevry.ide`, so settings, Keychain entries and repo hook files carry over). App icon: `src-tauri/icons/icon.svg`.
+- Name: Aira, pronounced “aye-ra” (renamed from "IDE" on 2026-10-02; bundle identifier `com.codevry.aira` since 2026-11-12, before the first signed release). App icon: `src-tauri/icons/icon.svg`.
 - Third-party agent logos in `src/assets/agents/` only identify each tool (see `NOTICE.md` there).
 
 ## Evidence on Hand
