@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { api, type Settings } from "../ipc";
 import { notify, updateConfig, useStore } from "../store";
 import { AI_PROVIDERS, aiCfg, aiProvider } from "../lib/aiProviders";
@@ -45,10 +46,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const saved = !!s.ai.keySaved[p.id];
   const [fonts, setFonts] = useState({ all: UI_FONTS, mono: MONO_FONTS });
   const [installedAgents, setInstalledAgents] = useState<Set<string> | null>(null);
+  const [version, setVersion] = useState("");
   useEffect(() => {
     installedFonts ??= api.listFonts().catch(() => ({ all: [], mono: [] }));
     installedFonts.then((f) => f.all.length && setFonts(f));
     availableAgents().then(setInstalledAgents);
+    getVersion().then(setVersion).catch(() => {});
   }, []);
   const pick = (id: Section) => setSection((lastSection = id));
   const toggleAgent = (id: string, show: boolean) =>
@@ -220,7 +223,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             {saved && <button type="button" className="btn" onClick={() => saveKey("")}>Remove</button>}
           </div>
           <small className="dim">
-            <Icon name="lock" size={12} /> Stored only in your macOS Keychain (service “com.codevry.ide”); never written to Aira's config or logs.
+            <Icon name="lock" size={12} /> Stored only in your macOS Keychain (service “com.codevry.aira”); never written to Aira's config or logs.
           </small>
         </label>
       )}
@@ -249,6 +252,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <Icon name={x.icon} size={16} /> {x.label}
             </button>
           ))}
+          {version && <span className="settings-version">Aira {version}</span>}
         </nav>
         <div className="form settings-pane" role="tabpanel">
           <h3>{SECTIONS.find((x) => x.id === section)?.label}</h3>

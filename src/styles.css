@@ -1235,6 +1235,12 @@ textarea {
   background: var(--elev);
   color: var(--text);
 }
+.settings-version {
+  margin-top: auto;
+  padding: 0 10px;
+  font-size: 11px;
+  color: var(--dim);
+}
 .settings-pane {
   min-width: 0;
   overflow: auto;

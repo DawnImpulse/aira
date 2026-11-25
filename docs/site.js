@@ -40,6 +40,18 @@ for (const fig of document.querySelectorAll(".clip")) {
   io.observe(v);
 }
 
+// Download buttons point at the latest release page; with JavaScript they link the versioned DMG itself
+// (Aira_X.Y.Z_universal.dmg) and the version shows next to them. Unauthenticated API: 60 requests an hour
+// per IP, so a failure just leaves the static links.
+fetch("https://api.github.com/repos/DawnImpulse/aira/releases/latest")
+  .then((r) => (r.ok ? r.json() : Promise.reject()))
+  .then((rel) => {
+    const dmg = rel.assets.find((a) => a.name.endsWith(".dmg"));
+    if (dmg) for (const a of document.querySelectorAll("a[data-download]")) a.href = dmg.browser_download_url;
+    for (const s of document.querySelectorAll("[data-latest]")) s.textContent = rel.tag_name;
+  })
+  .catch(() => {});
+
 // Copy a code block without its "$ " prompts. Without JavaScript the button stays hidden.
 for (const block of document.querySelectorAll(".code")) {
   const copy = block.querySelector(".copy-btn");

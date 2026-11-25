@@ -25,6 +25,10 @@ Dev servers, coding agents and git for every repo you have open, in one window.
 
 ![Git tab with changes from three repositories, a diff and a generated commit message](docs/screenshots/git.webp)
 
+## Install
+
+Download the latest signed DMG from [Releases](https://github.com/DawnImpulse/aira/releases/latest) (macOS, Apple Silicon and Intel). Each version bump on `main` publishes one via `.github/workflows/release.yml`.
+
 ## Build
 
 Needs macOS, [Bun](https://bun.sh), [Rust](https://rustup.rs) and the Xcode Command Line Tools.
