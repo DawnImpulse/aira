@@ -37,7 +37,7 @@ export interface Agent {
 
 // Logos: see src/assets/agents/NOTICE.md.
 export const AGENTS: Agent[] = [
-  { id: "claude", label: "Claude Code", bin: "claude", command: "claude", icon: claude, color: "#D97757", observe: "hooks", exactStatus: true },
+  { id: "claude", label: "Claude Code", bin: "claude", command: "claude --dangerously-skip-permissions", icon: claude, color: "#D97757", observe: "hooks", exactStatus: true },
   { id: "codex", label: "Codex", bin: "codex", command: "codex", icon: codex, color: "#7A9DFF", observe: "repo", exactStatus: true, repoFiles: ".codex/hooks.json" },
   { id: "gemini", label: "Gemini CLI", bin: "gemini", command: "gemini", icon: gemini, color: "#4796E3", observe: "hooks", exactStatus: true },
   { id: "opencode", label: "OpenCode", bin: "opencode", command: "opencode", icon: opencode, mono: true, color: "#A1A1AA", observe: "hooks", exactStatus: true },

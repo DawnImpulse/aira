@@ -72,8 +72,15 @@ function xterm(key: string): XT {
   term.loadAddon(fitAddon);
   term.loadAddon(new WebLinksAddon((_e, uri) => void openUrl(uri)));
   term.attachCustomKeyEventHandler((e) => {
-    if (e.type === "keydown" && e.metaKey && e.key === "k") {
+    if (e.type !== "keydown") return true;
+    if (e.metaKey && e.key === "k") {
       term.clear();
+      return false;
+    }
+    // Shift+Enter in an agent terminal = new line, not submit. Backslash + Enter is what Claude Code's
+    // own /terminal-setup binds for xterm.js hosts (VS Code), and Gemini CLI reads it the same way.
+    if (e.shiftKey && e.key === "Enter" && get().terms[key]?.agent) {
+      term.input("\\\r");
       return false;
     }
     return true;
@@ -85,11 +92,13 @@ function xterm(key: string): XT {
   term.onData((d) => {
     lastIn.set(key, Date.now());
     if (d === "\x03" || d === "\x1b") interrupted(key); // Ctrl+C / Esc
+    else answered(key); // typing at a "Needs input" prompt: the agent is working again until its next status hook
     const id = live();
     if (id) api.ptyWrite(id, d).catch(() => {});
   });
   term.onBell(() => {
-    if (get().terms[key]?.agent) notifyAgent(key, "Needs your input");
+    // Agents also ring the bell when a turn ends, so it only means "needs input" where hooks give no exact status.
+    if (get().terms[key]?.agent && !hookActive.has(key)) notifyAgent(key, "Needs your input");
   });
   term.onResize(({ cols, rows }) => {
     lastIn.set(key, Date.now()); // an agent's redraw after a resize is not "work"
@@ -104,6 +113,19 @@ function xterm(key: string): XT {
     e.preventDefault();
     popupMenu(["Copy", "Paste", "-", { text: "Select All", action: () => term.selectAll() }, { text: "Clear", action: () => term.clear() }]);
   });
+  // ⌘V with an image on the clipboard: xterm would paste nothing. Claude Code (and Gemini CLI) attach the
+  // clipboard image on Ctrl+V, so hand them that keystroke and let them read the clipboard themselves.
+  el.addEventListener(
+    "paste",
+    (e) => {
+      const cd = e.clipboardData;
+      if (!cd || cd.getData("text/plain") || ![...cd.items].some((i) => i.type.startsWith("image/")) || !get().terms[key]?.agent) return;
+      e.preventDefault();
+      e.stopPropagation();
+      term.input("\x16");
+    },
+    true,
+  );
   const x: XT = { term, fit: fitAddon, el, opened: false, webgl: null };
   xts.set(key, x);
   return x;
@@ -483,6 +505,13 @@ async function ensureRepoHooks(t: Term, a: Agent): Promise<boolean> {
 }
 
 const interruptedAt = new Map<string, number>(); // terminals handed back to the heuristic by Ctrl+C / Esc
+
+/** Input at a "Needs input" prompt (permission answer, reply): the agent resumes, so show Working until a hook says otherwise. */
+function answered(key: string) {
+  const st = get().agentStatus[key];
+  if (st?.state !== "waiting" || !hookActive.has(key)) return;
+  useStore.setState((s) => ({ agentStatus: { ...s.agentStatus, [key]: { ...st, state: "working", since: Date.now() } } }));
+}
 
 /**
  * Ctrl+C / Esc may interrupt the agent's turn, and agents don't send their turn-end hook then (Claude

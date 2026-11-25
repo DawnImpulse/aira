@@ -12,6 +12,8 @@ export const SHORTCUTS: { keys: string; label: string }[] = [
   { keys: "⌥⌘B", label: "Toggle Files/Git panel" },
   { keys: "⌘S", label: "Save file" },
   { keys: "⌘K", label: "Clear terminal" },
+  { keys: "⇧⏎", label: "New line in an agent terminal (without submitting)" },
+  { keys: "⌘V", label: "Paste text, or attach a clipboard image to a coding agent" },
   { keys: "⌘⏎", label: "Commit" },
   { keys: "Esc", label: "Close dialog / cancel rename" },
 ];

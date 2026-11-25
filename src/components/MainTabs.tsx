@@ -269,7 +269,7 @@ function Launcher({ tabId }: { tabId?: string }) {
     <div className="launcher">
       <h2 className="launcher-title">Open…</h2>
       {!project && <p className="dim small launcher-hint">Open a folder with ⌘O to get started.</p>}
-      <WorkspaceLinks onOpen={openInBrowser} editable />
+      {space && <WorkspaceLinks onOpen={openInBrowser} editable />}
       <div className="launcher-grid">
         <button className="launch-tile" onClick={() => inSpace((id, cwd) => newTerminal(id, { cwd }))}>
           <Icon name="terminal" size={24} />
@@ -292,8 +292,8 @@ function Launcher({ tabId }: { tabId?: string }) {
           </button>
         ))}
       </div>
-      <RecentLinks onOpen={openInBrowser} />
-      <PinInput />
+      {space && <RecentLinks onOpen={openInBrowser} />}
+      {space && <PinInput />}
     </div>
   );
 }

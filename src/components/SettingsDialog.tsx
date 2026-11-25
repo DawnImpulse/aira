@@ -5,6 +5,7 @@ import { notify, updateConfig, useStore } from "../store";
 import { AI_PROVIDERS, aiCfg, aiProvider } from "../lib/aiProviders";
 import { AGENTS, availableAgents, hasBinary } from "../lib/agents";
 import { SHORTCUTS } from "../lib/shortcuts";
+import { checkForUpdates } from "../lib/updates";
 import { AgentIcon, cx, Icon, Modal } from "./ui";
 
 // Fallbacks if the installed-font lookup fails (non-macOS or CoreText error).
@@ -14,6 +15,7 @@ const MONO_FONTS = ["SF Mono", "Menlo", "Monaco", "Courier New", "JetBrains Mono
 const SECTIONS = [
   { id: "appearance", label: "Appearance", icon: "palette" },
   { id: "agents", label: "Coding agents", icon: "smart_toy" },
+  { id: "notifications", label: "Notifications", icon: "notifications" },
   { id: "ai", label: "Commit messages", icon: "auto_awesome" },
   { id: "shortcuts", label: "Shortcuts", icon: "keyboard" },
 ] as const;
@@ -129,12 +131,25 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     </>
   );
 
-  const agents = (
+  const notifications = (
     <>
       <label className="check">
         <input type="checkbox" checked={s.notifyAgents} onChange={(e) => upd((x) => void (x.notifyAgents = e.target.checked))} />
         <span>Notify me when a coding agent finishes, needs input, or exits (only when I'm not looking at it).</span>
       </label>
+      <div className="row gap">
+        <button type="button" className="btn" onClick={() => api.notifyAgent("", "Aira", "Test notification – banners are working.").catch(notify)}>
+          Send a test notification
+        </button>
+      </div>
+      <small className="dim">
+        Nothing showing? Allow Aira under System Settings → Notifications. A dev build that isn't installed in /Applications posts its banners as “Terminal”.
+      </small>
+    </>
+  );
+
+  const agents = (
+    <>
       <small className="dim">The “+” menu shows installed agents. Hide any you don’t use; enable others once their CLI is installed.</small>
       <div className="agent-list">
         {AGENTS.map((a) => {
@@ -252,12 +267,20 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <Icon name={x.icon} size={16} /> {x.label}
             </button>
           ))}
-          {version && <span className="settings-version">Aira {version}</span>}
+          {version && (
+            <span className="settings-version">
+              Aira {version}
+              <button type="button" className="link-btn" onClick={() => checkForUpdates(true)}>
+                Check for updates
+              </button>
+            </span>
+          )}
         </nav>
         <div className="form settings-pane" role="tabpanel">
           <h3>{SECTIONS.find((x) => x.id === section)?.label}</h3>
           {section === "appearance" && appearance}
           {section === "agents" && agents}
+          {section === "notifications" && notifications}
           {section === "ai" && ai}
           {section === "shortcuts" && (
             <dl className="shortcuts">
