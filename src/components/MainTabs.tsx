@@ -311,9 +311,10 @@ function AgentLauncher() {
     clearTimeout(hoverTimer.current);
     hoverTimer.current = window.setTimeout(() => setOpen(true), 300);
   };
+  // A short grace period: the pointer crosses a small gap on its way from the button into the menu.
   const hoverLeave = () => {
     clearTimeout(hoverTimer.current);
-    setOpen(false);
+    hoverTimer.current = window.setTimeout(() => setOpen(false), 150);
   };
   useEffect(() => {
     if (!open) return;
