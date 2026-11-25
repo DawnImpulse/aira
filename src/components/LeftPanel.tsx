@@ -84,6 +84,7 @@ function SpacesView({ projects }: { projects: Project[] }) {
 
 function ProjectSection({ project: p }: { project: Project }) {
   const [editing, setEditing] = useState(false);
+  const unseen = useStore((s) => Object.values(s.terms).some((t) => t.agent && s.agentStatus[t.key]?.unseen && p.spaces.some((x) => x.id === spaceOfPath(t.cwd)?.id)));
   // Single click toggles collapse; wait a beat so a double-click (rename) doesn't also toggle.
   const clickTimer = useRef<number | undefined>(undefined);
   const onHeadClick = () => {
@@ -125,6 +126,7 @@ function ProjectSection({ project: p }: { project: Project }) {
             {p.name}
           </span>
         )}
+        {unseen && <Icon name="notifications_unread" size={14} className="amber" title="An agent needs you here" />}
         <span className="hover-actions">
           <IconButton icon="library_add" title="Add space" onClick={stop(() => openSpaceDialog(p.id))} />
           <IconButton icon="settings" title="Project settings (name, icon, color, remove)" onClick={stop(() => useStore.setState({ dialog: { kind: "project", projectId: p.id } }))} />
@@ -178,6 +180,7 @@ function SpaceCard({ project, space, showProject }: { project: Project; space: S
           </span>
         )}
         {(running || failed) && <span className={cx("dot", running ? "green" : "red")} title={running ? "Scripts running" : "A script failed"} />}
+        {finishedUnseen && <Icon name="notifications_unread" size={14} className="amber" title="An agent needs you here" />}
         <span className="spacer" />
         <span className="hover-actions">
           {space.asleep ? (
@@ -290,7 +293,7 @@ function AgentRow({ t, st }: { t: Term; st?: AgentStatus }) {
   const label = !live
     ? t.status === "exited" ? "Exited" : "Not running"
     : working ? "Working" : st?.state === "waiting" ? "Needs input" : st?.everWorked ? "Done" : "Idle";
-  const name = t.renamed ? t.name : (a?.label ?? "Agent");
+  const name = t.name.replace(/^.*? · /, ""); // "Claude Code 2": the numbered name minus the project prefix the card already sits under
   const usage = useStore((s) => s.usage[t.key]);
   return (
     <div className="agent-row" onClick={stop(() => focusTerminal(t.key))} title={`${t.name} — click to open`}>
@@ -303,6 +306,7 @@ function AgentRow({ t, st }: { t: Term; st?: AgentStatus }) {
           {usageLabel(usage)}
         </span>
       )}
+      {st?.unseen && <Icon name="notifications_unread" size={13} className="amber" title="Needs you – not seen yet" />}
       <span className="age">{ago(live ? (st?.since ?? t.startedAt) : t.endedAt)}</span>
     </div>
   );
