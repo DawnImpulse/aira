@@ -11,6 +11,8 @@
     "core:window:allow-start-dragging",
     "opener:default",
     "dialog:default",
-    "core:window:allow-set-badge-count"
+    "core:window:allow-set-badge-count",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

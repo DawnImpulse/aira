@@ -27,7 +27,7 @@ Dev servers, coding agents and git for every repo you have open, in one window.
 
 ## Install
 
-Download the latest signed DMG from [Releases](https://github.com/DawnImpulse/aira/releases/latest) (macOS, Apple Silicon and Intel). Each version bump on `main` publishes one via `.github/workflows/release.yml`.
+Download the latest signed DMG from [Releases](https://github.com/DawnImpulse/aira/releases/latest) (macOS, Apple Silicon and Intel). Every push to `main` with `feat`/`fix` commits publishes one via `.github/workflows/release.yml`; the version is computed from conventional commits and injected at build time (the `0.0.0` in the repo is a placeholder). Installed apps update themselves from there.
 
 ## Build
 
@@ -36,8 +36,8 @@ Needs macOS, [Bun](https://bun.sh), [Rust](https://rustup.rs) and the Xcode Comm
 ```sh
 bun install
 bun tauri dev     # run the app
-bun run app       # same, but as com.codevry.aira.dev: own config/data dir, safe next to an installed Aira.app
-bun tauri build   # Aira.app in src-tauri/target/release/bundle/macos
+bun run app       # same, but as com.codevry.aira.dev with an inverted icon: own config/data dir, safe next to an installed Aira.app
+bun tauri build   # Aira.app in src-tauri/target/release/bundle/macos; needs TAURI_SIGNING_PRIVATE_KEY=certificates/updater.key and TAURI_SIGNING_PRIVATE_KEY_PASSWORD (updater artifacts are signed)
 ```
 
 Rust tests: `cd src-tauri && cargo test`

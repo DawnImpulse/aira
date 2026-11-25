@@ -9,12 +9,13 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 
 - [ ] Small workspaces for branching and doing work · ~TBD
 - [ ] Check the website's videos in Safari and on a phone once it's live · ~TBD
-- [ ] Mac application deploy · ~TBD
 - [ ] Register the website with Google Search Console and Bing Webmaster Tools, submit the sitemap · ~TBD
+- [ ] In-app support for updates · ~TBD
 
 ## Done
 
 <!-- - [x] What · vX.Y.Z · YYYY-MM-DD -->
+- [x] Mac application deploy: signed, notarized universal DMG per version bump via GitHub Actions, site download button resolves the latest release · v0.1.0 · 2026-11-25
 - [x] Connect the website's feedback form to horm (horm.codevry.com) · 2026-11-11
 - [x] Browser tab: capture an element, region or full page and paste selector + PNG into an agent's terminal · v0.1.0 · 2026-11-10
 - [x] Browser tab: pop out a page or device view into its own window and dock it back · v0.1.0 · 2026-11-10
