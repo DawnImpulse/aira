@@ -18,7 +18,7 @@ jobs:
   mac:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5 # v4 targets Node 20, which runners now warn about
         with:
           fetch-depth: 0 # tags and the commit log decide the version
       - id: v
@@ -72,7 +72,15 @@ jobs:
           SIG=$(cat "$B"/macos/Aira.app.tar.gz.sig) # own line so a missing .sig fails the job instead of publishing an empty signature
           jq -n --arg v "$V" --arg url "$URL" --arg sig "$SIG" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{version: $v, pub_date: $date, platforms: (["darwin-universal", "darwin-aarch64", "darwin-x86_64"] | map({(.): {url: $url, signature: $sig}}) | add)}' > latest.json
-          gh release create "v$V" "$B"/dmg/Aira_*.dmg "$B"/macos/Aira.app.tar.gz "$B"/macos/Aira.app.tar.gz.sig latest.json --target "$GITHUB_SHA" --title "Aira v$V" --generate-notes
+          ASSETS=("$B"/dmg/Aira_*.dmg "$B"/macos/Aira.app.tar.gz "$B"/macos/Aira.app.tar.gz.sig latest.json)
+          # GitHub's releases API returns the odd 502; the build took 15 minutes, so retry the publish rather than the job.
+          # A release left behind by a half-done attempt gets its assets (re)uploaded instead of a second create.
+          for i in 1 2 3 4 5 6; do
+            if gh release view "v$V" >/dev/null 2>&1; then gh release upload "v$V" "${ASSETS[@]}" --clobber && exit 0
+            else gh release create "v$V" "${ASSETS[@]}" --target "$GITHUB_SHA" --title "Aira v$V" --generate-notes && exit 0; fi
+            echo "GitHub API error, retrying in 30s ($i/6)"; sleep 30
+          done
+          exit 1
         env:
           GH_TOKEN: ${{ github.token }}
           V: ${{ steps.v.outputs.version }}
