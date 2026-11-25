@@ -36,6 +36,7 @@ Needs macOS, [Bun](https://bun.sh), [Rust](https://rustup.rs) and the Xcode Comm
 ```sh
 bun install
 bun tauri dev     # run the app
+bun run app       # same, but as com.codevry.aira.dev: own config/data dir, safe next to an installed Aira.app
 bun tauri build   # Aira.app in src-tauri/target/release/bundle/macos
 ```
 
