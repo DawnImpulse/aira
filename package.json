@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "screenshots": "node scripts/screenshots/shots.mjs",
-    "clips": "node scripts/screenshots/clips.mjs"
+    "clips": "node scripts/screenshots/clips.mjs",
+    "site": "python3 -m http.server 8765 -d docs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
