@@ -23,7 +23,7 @@ const CURSOR = 1.3; // arrow size relative to the UI, a little larger than life 
 const WIDE = { viewport: { width: 1184, height: 740 }, out: { width: 1920, height: 1200 }, maxZoom: 1.6, crf: 30 };
 const HALF = { viewport: { width: 1120, height: 700 }, out: { width: 1280, height: 800 }, maxZoom: 2, crf: 28 };
 // The intro under the headline: the full 1440×900 window, with gentle zooms only.
-const HERO = { viewport: { width: 1440, height: 900 }, out: { width: 1920, height: 1200 }, maxZoom: 1.4, crf: 30 };
+const HERO = { viewport: { width: 1440, height: 900 }, out: { width: 1920, height: 1200 }, maxZoom: 1.3, crf: 30, w: 4.5 };
 
 if (!(await fetch("http://localhost:1420/").then((r) => r.ok, () => false))) {
   console.error("Start the dev server first: bun run dev");
@@ -127,7 +127,7 @@ function cursorAt(track, t) {
 
 // Critically damped springs (zoom in log space) toward the active cue: smooth starts and stops, no overshoot.
 // Long pans zoom out a little on the way, and the view slides along when the cursor nears its edge.
-function cameraPath(take, { t0, t1, vp }, maxZoom) {
+function cameraPath(take, { t0, t1, vp }, maxZoom, w = 8.5) {
   const { width: W, height: H } = vp;
   const target = (t) => {
     const c = take.cues.findLast((q) => q.t <= t);
@@ -139,7 +139,7 @@ function cameraPath(take, { t0, t1, vp }, maxZoom) {
     const y = clamp(b.y + b.height / 2, cur.y - vh * 0.38, cur.y + vh * 0.38);
     return { x: clamp(x, vw / 2, W - vw / 2), y: clamp(y, vh / 2, H - vh / 2), z };
   };
-  const w = 8.5; // rad/s: settles in about 0.65s (zoom transitions are the costly frames to encode)
+  // w in rad/s: 8.5 settles in about 0.65s; the intro uses 4.5 (~1.2s) so its moves read as a slow glide.
   const s = { x: W / 2, y: H / 2, l: 0, vx: 0, vy: 0, vl: 0 };
   const path = [];
   for (let t = t0; t <= t1; t += 1000 / FPS) {
@@ -204,7 +204,7 @@ async function render(browser, name, take, shot, cfg) {
     };
   }, out);
 
-  const path = cameraPath(take, shot, cfg.maxZoom);
+  const path = cameraPath(take, shot, cfg.maxZoom, cfg.w);
   const seconds = path.length / FPS;
   const fade = `fade=t=in:st=0:d=0.25,fade=t=out:st=${(seconds - 0.3).toFixed(2)}:d=0.3`;
   const ff = spawn("ffmpeg", ["-v", "error", "-y", "-f", "image2pipe", "-c:v", "mjpeg", "-framerate", String(FPS), "-i", "-",
@@ -282,6 +282,8 @@ const SESSION = {
     "\r\n\x1b[35m⏺\x1b[0m \x1b[1mgeneral-purpose\x1b[0m(Read checkout flow)\r\n  \x1b[2m⎿  Reading src/app/checkout/…\x1b[0m\r\n",
     "\r\n\x1b[35m⏺\x1b[0m \x1b[1mtest-writer\x1b[0m(Write pricing tests)\r\n  \x1b[2m⎿  Running…\x1b[0m\r\n",
   ],
+  ask: "\r\n\x1b[1m⏺\x1b[0m Fixed coupons below minSpend: ignore the coupon, or reject the order?\r\n\r\n  \x1b[36m❯ 1. Ignore it (current tests expect this)\x1b[0m\r\n    2. Reject the order\r\n\r\n",
+  done: "\r\n\x1b[1m⏺\x1b[0m Done: pricing.ts rounds once and 8 tests pass.\r\n",
 };
 
 // The whole demo scene, with storefront in front (Start leaves its scripts window there).
@@ -324,9 +326,35 @@ const CLIPS = {
         await term(p, SESSION.steps[i]);
         await pushHooks(p, step);
       }
-      await wait(1300);
+      await wait(1200);
+      // Look away (back to the editor); Claude asks a question: the card reads Needs input and the bell lights up.
+      await take.click(p.locator(".tab-title", { hasText: "pricing.ts" }), { look: { x: 0, y: 40, width: 640, height: 400 }, hold: 4500 });
+      await wait(700);
+      await term(p, SESSION.ask);
+      await pushHooks(p, [{ hook_event_name: "Notification", notification_type: "agent_needs_input" }]);
+      await wait(1400);
       take.poster();
-      await take.look(card(p, "checkout-v2"), { zoom: 1.6, hold: 1300 });
+      await take.look(card(p, "storefront"), { zoom: 1.6, hold: 1500 });
+      await wait(1500);
+      const bell = byTitle(p, "Agent notifications: finished, needs input, exited");
+      const bb = await rect(bell);
+      await take.click(bell, { look: { x: bb.x - 300, y: bb.y - 120, width: 420, height: 150 }, zoom: 1.6, hold: 300 });
+      await wait(400);
+      const notices = await rect(p.locator(".popover", { hasText: "Notifications" }));
+      await take.look({ x: notices.x - 24, y: notices.y - 24, width: notices.width + 48, height: bb.y + bb.height - notices.y + 36 }, { hold: 2000 });
+      await wait(1600);
+      // The notice opens the session; answering flips the card back to Working, and the finish to Done.
+      await take.click(p.locator(".notice-row").first(), { look: { x: 0, y: 40, width: 640, height: 400 }, hold: 6000 });
+      await wait(500);
+      await p.locator(".terminal-view:visible .xterm-helper-textarea").focus();
+      await take.move({ x: 560, y: 420 }, 500);
+      await wait(400);
+      await p.keyboard.press("Enter"); // takes the highlighted answer
+      await term(p, SESSION.done);
+      await wait(1200);
+      await pushHooks(p, [{ hook_event_name: "Stop" }]);
+      await wait(1500);
+      await take.look(card(p, "storefront"), { zoom: 1.5, hold: 1500 });
       await wait(2000);
     }),
 
@@ -336,15 +364,15 @@ const CLIPS = {
     clip("hero", HERO, fullScene, async (p, take) => {
       await wait(1000);
       const left = { x: 0, y: 30, width: 900, height: 560 };
-      await take.click(card(p, "checkout-v2"), { look: left, hold: 1900 });
+      await take.click(card(p, "checkout-v2"), { look: left, hold: 3200 }); // holds chain into the next cue: no zoom-out between beats
       await wait(1300);
-      await take.click(card(p, "storefront"), { look: left, hold: 800 });
+      await take.click(card(p, "storefront"), { look: left, hold: 1800 });
       await wait(600);
       const r = await rect(p.locator(".right-panel"));
-      await take.click(p.locator(".right-panel .segmented button", { hasText: "Git" }), { look: { x: r.x - 220, y: r.y, width: r.width + 220, height: 520 }, hold: 2000 });
+      await take.click(p.locator(".right-panel .segmented button", { hasText: "Git" }), { look: { x: r.x - 220, y: r.y, width: r.width + 220, height: 520 }, hold: 3000 });
       await wait(1500);
       const btn = p.locator(".status-btn", { hasText: /port/ });
-      await take.click(btn, { zoom: 1.3, hold: 500 });
+      await take.click(btn, { zoom: 1.3, hold: 1200 });
       await wait(300);
       const pop = await rect(p.locator(".ports-popover"));
       const b = await rect(btn);
@@ -355,13 +383,15 @@ const CLIPS = {
       await wait(1600);
     }),
 
-  // Each space keeps its own tabs; starring one adds it to the Spaces tab.
+  // Each space keeps its own tabs; sleeping one stops its agents and keeps the tabs; starring adds it to the Spaces tab.
   spaces: () =>
     clip("spaces", HALF, fullScene, async (p, take) => {
       await wait(500);
       const side = { x: 0, y: 36, width: 600, height: 400 };
       await take.click(card(p, "checkout-v2"), { look: side, hold: 1700 });
       await wait(1300);
+      await take.click(card(p, "checkout-v2").locator('[title^="Sleep"], [data-tip^="Sleep"]'), { zoom: 2, hold: 1500 }); // shows on hover; the glide there hovers the card
+      await wait(1400);
       await take.click(card(p, "ui-kit"), { look: side, hold: 1300 });
       await wait(1000);
       await take.click(card(p, "ui-kit").locator('[title^="Star"], [data-tip^="Star"]'), { zoom: 2, hold: 900 });
@@ -465,7 +495,7 @@ const CLIPS = {
       await wait(3000);
     }),
 
-  // Settings: flip the whole UI to light (the loop fades back to dark).
+  // Settings: its sections, then flip the whole UI to light (the loop fades back to dark).
   editor: () =>
     clip("editor", HALF, async (p) => {
       await startScripts(p);
@@ -478,6 +508,15 @@ const CLIPS = {
       await take.click(byTitle(p, "Settings (⌘,)"), { zoom: 1.6, hold: 500 });
       await wait(450);
       const modal = await rect(p.locator(".modal"));
+      await take.look(modal, { hold: 1200 });
+      await wait(600);
+      const nav = (t) => p.locator(".settings-nav button", { hasText: t });
+      const navBox = await rect(p.locator(".settings-nav"));
+      const navCue = { x: navBox.x - 10, y: navBox.y - 10, width: Math.min(modal.width, 480), height: 300 };
+      await take.click(nav("Notifications"), { look: navCue, hold: 1500 });
+      await wait(1300);
+      await take.click(nav("Appearance"), { look: navCue, hold: 600 });
+      await wait(500);
       const light = p.locator(".modal .segmented button", { hasText: "Light" });
       const lb = await rect(light);
       const row = { x: modal.x, y: lb.y - 70, width: modal.width, height: 180 };
