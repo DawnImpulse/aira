@@ -363,10 +363,10 @@ export function newTerminal(projectId: string, opts: { cwd?: string; command?: s
   if (!p) return;
   const { cwd, command, label, agent } = opts;
   const key = `t-${uid()}`;
-  const n = Object.values(get().terms).filter((t) => t.projectId === projectId && !t.scriptId).length;
-  const name = label
-    ? `${p.name} · ${label}`
-    : `${p.name} · ${cwd && cwd !== p.path ? cwd.slice(cwd.lastIndexOf("/") + 1) : "shell"}${n ? ` ${n + 1}` : ""}`;
+  // Numbered per base name ("ide · Claude Code 2"), so two agents of one kind stay apart in tabs, banners and notices.
+  const base = `${p.name} · ${label || (cwd && cwd !== p.path ? cwd.slice(cwd.lastIndexOf("/") + 1) : "shell")}`;
+  const n = Object.values(get().terms).filter((t) => t.projectId === projectId && !t.scriptId && (t.name === base || t.name.startsWith(`${base} `))).length;
+  const name = n ? `${base} ${n + 1}` : base;
   useStore.setState((s) => ({ terms: { ...s.terms, [key]: { key, name, projectId, cwd: cwd ?? p.path, command, agent, status: "idle" } } }));
   openTerminalTab(key);
   startSession(key);
@@ -487,7 +487,7 @@ function notifyAgent(key: string, what: string) {
   const now = Date.now();
   if (now - (lastNotified.get(key) ?? 0) < (what === "Needs your input" ? 10_000 : 5_000)) return;
   lastNotified.set(key, now);
-  const title = t.renamed ? t.name : (agentById(t.agent)?.label ?? "Agent");
+  const title = t.name; // unique per terminal (numbered), unlike the agent's label
   const space = spaceOfPath(t.cwd);
   const body = space ? `${what} · ${space.name}` : what;
   api.notifyAgent(key, title, body).catch(() => {}); // resolves on click/clear, so never awaited
