@@ -438,6 +438,12 @@ export function setActiveSpace(projectId: string, spaceId?: string) {
 }
 export const setActiveProject = (id: string) => setActiveSpace(id);
 
+/** Looking at a terminal tab (any way it became active, or the window coming back) counts as seeing it. */
+function seeActiveTerm() {
+  const id = get().config.layout.activeTab;
+  if (id?.startsWith("term:")) markSeen([id.slice(5)]);
+}
+
 /** Clears the "finished, not yet seen" flag for these agent terminals. */
 export function markSeen(keys: string[]) {
   const { agentStatus } = get();
@@ -643,15 +649,11 @@ function insertTab(c: Config, tab: Tab) {
   c.layout.tabs.splice(i < 0 ? c.layout.tabs.length : i + 1, 0, tab);
 }
 
-export const activateTab = (id: string) => {
-  if (id.startsWith("term:")) markSeen([id.slice(5)]);
-  updateConfig((c) => void (c.layout.activeTab = id));
-};
+export const activateTab = (id: string) => updateConfig((c) => void (c.layout.activeTab = id));
 
 /** `win`: the window it belongs in (a project's scripts window), unless it's already open in the current one. */
 export function openTerminalTab(key: string, activate = true, win?: string) {
   const id = `term:${key}`;
-  if (activate) markSeen([key]);
   updateConfig((c) => {
     const l = c.layout;
     const p = projectOfWindow(c, win);
@@ -1000,6 +1002,7 @@ export async function boot() {
       saveTimer = window.setTimeout(saveNow, 400);
     }
     if (s.config.settings !== prev.config.settings) applySettings();
+    if (s.config.layout.activeTab !== prev.config.layout.activeTab) seeActiveTerm();
     if (s.agentStatus !== prev.agentStatus) {
       // Dock badge: agents that finished, asked, or exited while nobody was looking.
       const n = Object.values(s.agentStatus).filter((a) => a.unseen).length;
@@ -1009,6 +1012,8 @@ export async function boot() {
       }
     }
   });
+
+  window.addEventListener("focus", seeActiveTerm);
 
   config.projects.forEach((p) => discover(p.id));
   syncWatch();
