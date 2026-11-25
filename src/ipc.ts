@@ -236,6 +236,7 @@ export const api = {
   writeFile: (path: string, content: string) => invoke("write_file", { path, content }),
   createPath: (path: string, dir: boolean) => invoke("create_path", { path, dir }),
   copyText: (text: string) => invoke("copy_text", { text }),
+  clipboardPaths: () => invoke<string[]>("clipboard_paths"),
   /** Zero-touch per-launch setup (extra args + env) for an agent's hooks/plugin. */
   agentSetup: (agent: string, key: string) => invoke<{ args: string[]; env: Record<string, string> }>("agent_setup", { agent, key }),
   /** Opt-in project hook file: "on" | "exists" (foreign file, untouched) | "off" | "unsupported". */

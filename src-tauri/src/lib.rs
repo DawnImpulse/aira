@@ -153,6 +153,7 @@ pub fn run() {
             fs::write_file,
             fs::create_path,
             fs::copy_text,
+            fs::clipboard_paths,
             fs::list_fonts,
             fs::load_config,
             fs::save_config,

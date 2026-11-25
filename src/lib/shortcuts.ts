@@ -13,6 +13,7 @@ export const SHORTCUTS: { keys: string; label: string }[] = [
   { keys: "⌘S", label: "Save file" },
   { keys: "⌘K", label: "Clear terminal" },
   { keys: "⇧⏎", label: "New line in an agent terminal (without submitting)" },
+  { keys: "⌃⏎", label: "Send now in a Claude Code terminal (its ctrl+x ctrl+s)" },
   { keys: "⌘V", label: "Paste text, or attach a clipboard image to a coding agent" },
   { keys: "⌘⏎", label: "Commit" },
   { keys: "Esc", label: "Close dialog / cancel rename" },

@@ -3,6 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Channel } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
 import { api, type HookEvent, type Project, type PtyMessage, type Script, type Settings } from "../ipc";
@@ -72,15 +73,25 @@ function xterm(key: string): XT {
   term.loadAddon(fitAddon);
   term.loadAddon(new WebLinksAddon((_e, uri) => void openUrl(uri)));
   term.attachCustomKeyEventHandler((e) => {
-    if (e.type !== "keydown") return true;
+    // WebKit also fires keypress for Shift+Enter; left to xterm, that sends a second CR after ours (= submit).
+    if (e.type !== "keydown") return !(e.key === "Enter" && e.shiftKey);
     if (e.metaKey && e.key === "k") {
       term.clear();
       return false;
     }
-    // Shift+Enter in an agent terminal = new line, not submit. Backslash + Enter is what Claude Code's
-    // own /terminal-setup binds for xterm.js hosts (VS Code), and Gemini CLI reads it the same way.
-    if (e.shiftKey && e.key === "Enter" && get().terms[key]?.agent) {
-      term.input("\\\r");
+    // Shift+Enter in an agent terminal = new line, not submit. ESC CR (Option+Enter) is what Claude Code's own
+    // /terminal-setup binds in VS Code and Alacritty (a bare LF counts as Enter there); Gemini CLI reads backslash + Enter.
+    const agent = get().terms[key]?.agent;
+    if (e.shiftKey && e.key === "Enter" && agent) {
+      term.input(agent === "claude" ? "\x1b\r" : "\\\r");
+      return false;
+    }
+    // Ctrl+Enter: xterm.js sends a plain CR for it (no kitty keyboard protocol), so Claude Code would see Enter.
+    // Send the ctrl+x ctrl+s chord instead (its other default for chat:sendNow), as two writes so the input
+    // parser sees two keys, not one unknown sequence.
+    if (e.ctrlKey && e.key === "Enter" && agent === "claude") {
+      term.input("\x18");
+      setTimeout(() => term.input("\x13"), 10);
       return false;
     }
     return true;
@@ -113,22 +124,57 @@ function xterm(key: string): XT {
     e.preventDefault();
     popupMenu(["Copy", "Paste", "-", { text: "Select All", action: () => term.selectAll() }, { text: "Clear", action: () => term.clear() }]);
   });
-  // ⌘V with an image on the clipboard: xterm would paste nothing. Claude Code (and Gemini CLI) attach the
-  // clipboard image on Ctrl+V, so hand them that keystroke and let them read the clipboard themselves.
+  // ⌘V with files on the clipboard: xterm would paste nothing. WebKit shows them only as nameless File items
+  // (a Finder ⌘C and a screenshot look the same), so the native pasteboard decides: copied files paste their
+  // paths, as Terminal.app does; a bare image hands the agent Ctrl+V, on which Claude Code (and Gemini CLI)
+  // read the clipboard image themselves.
   el.addEventListener(
     "paste",
     (e) => {
-      const cd = e.clipboardData;
-      if (!cd || cd.getData("text/plain") || ![...cd.items].some((i) => i.type.startsWith("image/")) || !get().terms[key]?.agent) return;
+      if (!e.clipboardData?.files.length) return;
       e.preventDefault();
       e.stopPropagation();
-      term.input("\x16");
+      void api.clipboardPaths().then((paths) => {
+        if (paths.length) pasteFiles(key, term, paths);
+        else if (get().terms[key]?.agent) term.input("\x16");
+      });
     },
     true,
   );
   const x: XT = { term, fit: fitAddon, el, opened: false, webgl: null };
   xts.set(key, x);
+  hookFileDrops();
   return x;
+}
+
+/**
+ * File paths into a terminal as a paste (bracketed when the app asked for it), not keystrokes: Claude Code turns
+ * a pasted image path into an [Image #N] attachment. Other files go to Claude as @path mentions, read on submit.
+ */
+function pasteFiles(key: string, term: Terminal, paths: string[]) {
+  const esc = (p: string) => p.replace(/[ '"()&;|<>$`\\]/g, "\\$&");
+  const mention = get().terms[key]?.agent === "claude";
+  term.paste(paths.map((p) => (!mention || /\.(png|jpe?g|gif|webp)$/i.test(p) ? esc(p) : "@" + esc(p))).join(" ") + " ");
+}
+
+// Files dropped on a terminal (screenshots, logs): Tauri swallows the DOM drop event, so take its own and
+// paste the paths into the terminal under the pointer.
+let dropsHooked = false;
+function hookFileDrops() {
+  if (dropsHooked) return;
+  dropsHooked = true;
+  void getCurrentWebview().onDragDropEvent((e) => {
+    const pl = e.payload;
+    if (pl.type !== "drop" || !pl.paths.length) return;
+    // wry on macOS passes NSDraggingInfo.draggingLocation (points) through as "physical"; elsewhere it is pixels.
+    const { x, y } = pl.position.toLogical(navigator.platform.startsWith("Mac") ? 1 : window.devicePixelRatio);
+    const target = document.elementFromPoint(x, y);
+    const hit = target && [...xts.entries()].find(([, v]) => v.el.contains(target));
+    if (!hit) return;
+    const [tkey, xt] = hit;
+    pasteFiles(tkey, xt.term, pl.paths);
+    xt.term.focus();
+  });
 }
 
 function fit(x: XT) {
