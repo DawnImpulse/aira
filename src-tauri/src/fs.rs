@@ -83,6 +83,31 @@ pub async fn copy_text(text: String) -> Result<(), String> {
     child.wait().await.map_err(err).map(drop)
 }
 
+/// Paths of files on the clipboard (a Finder ⌘C), so a terminal can paste them like Terminal.app does.
+#[tauri::command]
+pub fn clipboard_paths() -> Vec<String> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSPasteboard;
+        use objc2_foundation::{NSString, NSURL};
+        let kind = NSString::from_str("public.file-url");
+        let items = NSPasteboard::generalPasteboard().pasteboardItems();
+        return items
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|it| {
+                        let url = it.stringForType(&kind)?;
+                        NSURL::URLWithString(&url)?.path().map(|p| p.to_string())
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+    }
+    #[cfg(not(target_os = "macos"))]
+    Vec::new()
+}
+
 // ---------- fonts ----------
 
 #[derive(Serialize, Default)]

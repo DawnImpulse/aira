@@ -39,9 +39,10 @@ const claude: Normalizer = (e) => {
     case "Stop":
       return caller ? [] : [{ kind: "stop" }];
     case "Notification": {
-      // Only prompts for the user; auth_success, agent_completed, quota_auto_resume_* etc. are not "needs input".
+      // Only real asks. idle_prompt fires 60s after a finished turn, and auth_success, agent_completed,
+      // quota_auto_resume_* etc. are status reports, so none of those count as "needs input".
       const t = str(e.notification_type) ?? "";
-      const asks = !t || ["permission_prompt", "idle_prompt", "agent_needs_input"].includes(t) || t.startsWith("elicitation");
+      const asks = ["permission_prompt", "agent_needs_input"].includes(t) || t.startsWith("elicitation");
       return caller || !asks ? [] : [{ kind: "waiting" }];
     }
   }

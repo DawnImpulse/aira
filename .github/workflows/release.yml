@@ -1,7 +1,11 @@
-# Signed, notarized universal DMG on every version bump. Runs on each push to main; builds only when
-# no release exists yet for the version in src-tauri/tauri.conf.json, so merges without a bump are no-ops.
+# Signed, notarized universal DMG whenever main gains releasable commits. The version comes from the
+# conventional commits since the last v* tag — "!" or "BREAKING CHANGE" → major, feat → minor, fix/perf →
+# patch, anything else → no release — and is injected at build time. The version fields in the repo stay
+# 0.0.0: main is PR-only, so CI cannot commit a bump; the tag on the release is the source of truth.
 # Secrets: APPLE_CERTIFICATE (base64 .p12), APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
 # APPLE_ID, APPLE_PASSWORD (app-specific), APPLE_TEAM_ID. Tauri's CLI reads them and signs + notarizes.
+# TAURI_SIGNING_PRIVATE_KEY + _PASSWORD sign the updater bundle (Aira.app.tar.gz); the release also
+# carries latest.json, which installed apps poll (plugins.updater in tauri.conf.json).
 name: Release
 on:
   push:
@@ -15,13 +19,25 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags and the commit log decide the version
       - id: v
         run: |
-          V=$(jq -r .version src-tauri/tauri.conf.json)
-          echo "version=$V" >> "$GITHUB_OUTPUT"
-          if gh release view "v$V" >/dev/null 2>&1; then echo "v$V already released, skipping"; echo "skip=1" >> "$GITHUB_OUTPUT"; fi
-        env:
-          GH_TOKEN: ${{ github.token }}
+          TAG=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
+          RANGE=${TAG:+$TAG..}HEAD
+          if git log "$RANGE" --format='%s%n%b' | grep -Eq '^[a-z]+(\([^)]*\))?!:|^BREAKING CHANGE:'; then BUMP=major
+          elif git log "$RANGE" --format=%s | grep -Eq '^feat(\([^)]*\))?:'; then BUMP=minor
+          elif git log "$RANGE" --format=%s | grep -Eq '^(fix|perf)(\([^)]*\))?:'; then BUMP=patch
+          else echo "No feat/fix commits since ${TAG:-the start}; nothing to release"; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          IFS=. read -r MA MI PA <<< "${TAG#v}"
+          case $BUMP in
+            major) MA=$((${MA:-0} + 1)); MI=0; PA=0 ;;
+            minor) MI=$((${MI:-0} + 1)); PA=0 ;;
+            patch) PA=$((${PA:-0} + 1)) ;;
+          esac
+          echo "$BUMP bump since ${TAG:-nothing}: $MA.$MI.$PA"
+          echo "version=$MA.$MI.$PA" >> "$GITHUB_OUTPUT"
       - if: ${{ !steps.v.outputs.skip }}
         run: test -n "$APPLE_CERTIFICATE" || { echo "::error::APPLE_* secrets not set; refusing to publish an unsigned build"; exit 1; }
         env:
@@ -37,8 +53,9 @@ jobs:
         with:
           workspaces: src-tauri
       - if: ${{ !steps.v.outputs.skip }}
-        run: bun install && bun tauri build --target universal-apple-darwin
+        run: bun install && bun tauri build --target universal-apple-darwin --config "{\"version\":\"$V\"}"
         env:
+          V: ${{ steps.v.outputs.version }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -46,8 +63,16 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           KEYCHAIN_PASSWORD: ${{ github.run_id }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       - if: ${{ !steps.v.outputs.skip }}
-        run: gh release create "v$V" src-tauri/target/universal-apple-darwin/release/bundle/dmg/Aira_*.dmg --target "$GITHUB_SHA" --title "Aira v$V" --generate-notes
+        run: |
+          B=src-tauri/target/universal-apple-darwin/release/bundle
+          URL="https://github.com/$GITHUB_REPOSITORY/releases/download/v$V/Aira.app.tar.gz"
+          SIG=$(cat "$B"/macos/Aira.app.tar.gz.sig) # own line so a missing .sig fails the job instead of publishing an empty signature
+          jq -n --arg v "$V" --arg url "$URL" --arg sig "$SIG" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{version: $v, pub_date: $date, platforms: (["darwin-universal", "darwin-aarch64", "darwin-x86_64"] | map({(.): {url: $url, signature: $sig}}) | add)}' > latest.json
+          gh release create "v$V" "$B"/dmg/Aira_*.dmg "$B"/macos/Aira.app.tar.gz "$B"/macos/Aira.app.tar.gz.sig latest.json --target "$GITHUB_SHA" --title "Aira v$V" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
           V: ${{ steps.v.outputs.version }}

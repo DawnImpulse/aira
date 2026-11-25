@@ -8,6 +8,7 @@ import { disposeModel, reloadIfClean, setEditorTheme } from "./lib/monaco";
 import { busyTerms, confirmKill, confirmScriptClose, newTerminal, removeTerm, runningList, setTerminalTheme, sleepTerm, startSession, stop as stopTerm } from "./lib/terminals";
 import { nextIdentity } from "./lib/identity";
 import { AGENTS } from "./lib/agents";
+import { checkForUpdates, scheduleUpdateChecks } from "./lib/updates";
 
 export interface Term extends TermSnapshot {
   sessionId?: string;
@@ -972,6 +973,7 @@ async function onQuitRequested() {
 function onMenu(id: string) {
   const { config } = get();
   if (id === "settings") set({ dialog: { kind: "settings" } });
+  else if (id === "check-updates") checkForUpdates(true);
   else if (id === "open-folder") openFolders();
   else if (id === "new-terminal") {
     const p = activeProject();
@@ -990,6 +992,7 @@ export async function boot() {
   set({ config, terms, restore, ready: true });
   applySettings();
   media.addEventListener("change", applySettings);
+  scheduleUpdateChecks();
 
   useStore.subscribe((s, prev) => {
     if (s.config !== prev.config || s.terms !== prev.terms) {
@@ -1016,7 +1019,7 @@ export async function boot() {
   });
   listen<string>("menu", (e) => onMenu(e.payload));
   listen("quit-requested", onQuitRequested);
-  listen<string>("notification-clicked", (e) => focusTerminal(e.payload));
+  listen<string>("notification-clicked", (e) => e.payload && focusTerminal(e.payload)); // no key: the Settings test banner
   listen<string>("browser:docked", (e) => set((s) => ({ popped: omit(s.popped, e.payload) })));
 }
 

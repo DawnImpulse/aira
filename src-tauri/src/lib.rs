@@ -23,6 +23,7 @@ fn menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                 true,
                 &[
                     &PredefinedMenuItem::about(app, None, None)?,
+                    &MenuItem::with_id(app, "check-updates", "Check for Updates…", true, None::<&str>)?,
                     &sep()?,
                     &item("settings", "Settings…", "CmdOrCtrl+,")?,
                     &sep()?,
@@ -97,6 +98,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(pty::Ptys::default())
         .manage(fs::Watch::default())
         .manage(browser::Browsers::default())
@@ -150,6 +153,7 @@ pub fn run() {
             fs::write_file,
             fs::create_path,
             fs::copy_text,
+            fs::clipboard_paths,
             fs::list_fonts,
             fs::load_config,
             fs::save_config,

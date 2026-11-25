@@ -1214,7 +1214,7 @@ textarea {
   flex-direction: column;
   gap: 2px;
 }
-.settings-nav button {
+.settings-nav > button {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1227,18 +1227,23 @@ textarea {
   text-align: left;
   cursor: pointer;
 }
-.settings-nav button:hover {
+.settings-nav > button:hover {
   background: var(--hover);
   color: var(--text);
 }
-.settings-nav button.on {
+.settings-nav > button.on {
   background: var(--elev);
   color: var(--text);
 }
 .settings-version {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   margin-top: auto;
   padding: 0 10px;
   font-size: 11px;
+  line-height: 16px;
   color: var(--dim);
 }
 .settings-pane {
