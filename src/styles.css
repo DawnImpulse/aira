@@ -1116,6 +1116,47 @@ textarea {
   padding: 8px 18px 18px;
   overflow: auto;
 }
+/* In-app confirm (lib/dialog): sits over any modal and the update card. */
+.confirm-backdrop {
+  z-index: 70;
+}
+.modal.confirm {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  width: 420px;
+  padding: 16px 18px 14px 16px;
+}
+.confirm-icon {
+  margin-top: 1px;
+  color: var(--accent);
+}
+.confirm-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.confirm-body b {
+  font-size: 14px;
+  font-weight: 600;
+}
+.confirm-body p {
+  margin: 0;
+  max-height: 40vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--dim);
+}
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
 .form {
   display: flex;
   flex-direction: column;
@@ -1376,10 +1417,15 @@ textarea {
   white-space: pre-wrap;
   color: var(--dim);
 }
-.update-body progress {
+.update-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+.update-progress progress {
   width: 100%;
   height: 6px;
-  margin-top: 6px;
   accent-color: var(--accent);
 }
 .update-actions {
@@ -1389,6 +1435,23 @@ textarea {
 }
 .update-pill {
   color: var(--accent);
+}
+.update-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--elev);
+  font-size: 12px;
+}
+.update-box b {
+  font-size: 13px;
+  font-weight: 600;
+}
+.update-box .row {
+  margin-top: 6px;
 }
 
 /* ---------- spaces (plan 002) ---------- */

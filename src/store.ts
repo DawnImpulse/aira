@@ -2,7 +2,8 @@ import { create } from "zustand";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { ask, type ConfirmReq } from "./lib/dialog";
 import { api, type Config, type FileEntry, type GitStatus, type PortInfo, type Project, type Repo, type Script, type Space, type SpaceView, type Tab, type TermSnapshot, type UsageRow } from "./ipc";
 import { disposeModel, reloadIfClean, setEditorTheme } from "./lib/monaco";
 import { attachInherited, busyTerms, confirmKill, confirmScriptClose, newTerminal, readHandoff, removeTerm, runningList, setTerminalTheme, sleepTerm, startSession, stop as stopTerm, writeHandoff } from "./lib/terminals";
@@ -73,6 +74,7 @@ interface State {
   mem: { sessions: Record<string, number>; app: number; procs?: Record<string, string[]> };
   dirty: Record<string, boolean>; // file path → unsaved edits
   dialog: Dialog;
+  confirm: ConfirmReq | null; // in-app OK/Cancel prompt (lib/dialog), may sit over a `dialog`
   restore: string[]; // script ids running at last quit
   ports: PortInfo[]; // listening TCP ports (lib/ports)
   toast: string | null;
@@ -126,6 +128,7 @@ export const useStore = create<State>(() => ({
   mem: { sessions: {}, app: 0 },
   dirty: {},
   dialog: null,
+  confirm: null,
   restore: [],
   ports: [],
   toast: null,

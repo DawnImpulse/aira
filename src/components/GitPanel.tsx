@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { ask } from "@tauri-apps/plugin-dialog";
+import { ask } from "../lib/dialog";
 import { api, type Branches, type FileEntry, type Project, type Repo, type Space } from "../ipc";
 import {
   addSpace, basename, discover, dirname, excludesFor, gitReposOf, isUnder, notify, openDiff, openFile, refreshStatus,

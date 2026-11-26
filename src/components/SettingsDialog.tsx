@@ -5,8 +5,9 @@ import { notify, updateConfig, useStore } from "../store";
 import { AI_PROVIDERS, aiCfg, aiProvider } from "../lib/aiProviders";
 import { AGENTS, availableAgents, hasBinary } from "../lib/agents";
 import { SHORTCUTS } from "../lib/shortcuts";
-import { checkForUpdates } from "../lib/updates";
-import { AgentIcon, cx, Icon, Modal } from "./ui";
+import { checkForUpdates, dismissUpdate, installUpdate, lastChecked, restartForUpdate } from "../lib/updates";
+import { UpdateProgress } from "./UpdateStatus";
+import { AgentIcon, cx, Icon, Modal, useNow } from "./ui";
 
 // Fallbacks if the installed-font lookup fails (non-macOS or CoreText error).
 const UI_FONTS = ["Inter", "Helvetica Neue", "Helvetica", "Avenir Next", "IBM Plex Sans", "Geist", "Roboto", "Open Sans", "Lato", "Source Sans 3", "Nunito", "Manrope", "DM Sans"];
@@ -18,6 +19,7 @@ const SECTIONS = [
   { id: "notifications", label: "Notifications", icon: "notifications" },
   { id: "ai", label: "Commit messages", icon: "auto_awesome" },
   { id: "shortcuts", label: "Shortcuts", icon: "keyboard" },
+  { id: "updates", label: "Updates", icon: "system_update_alt" },
 ] as const;
 type Section = (typeof SECTIONS)[number]["id"];
 
@@ -267,14 +269,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <Icon name={x.icon} size={16} /> {x.label}
             </button>
           ))}
-          {version && (
-            <span className="settings-version">
-              Aira {version}
-              <button type="button" className="link-btn" onClick={() => checkForUpdates(true)}>
-                Check for updates
-              </button>
-            </span>
-          )}
+          {version && <span className="settings-version" onClick={() => pick("updates")}>Aira {version}</span>}
         </nav>
         <div className="form settings-pane" role="tabpanel">
           <h3>{SECTIONS.find((x) => x.id === section)?.label}</h3>
@@ -282,6 +277,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           {section === "agents" && agents}
           {section === "notifications" && notifications}
           {section === "ai" && ai}
+          {section === "updates" && <Updates version={version} />}
           {section === "shortcuts" && (
             <dl className="shortcuts">
               {SHORTCUTS.map((k) => (
@@ -295,5 +291,67 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </Modal>
+  );
+}
+
+const ago = (t: number) => {
+  const m = Math.round((Date.now() - t) / 60000);
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
+};
+
+/** Settings → Updates: the same state as the bottom-right card (lib/updates), shown even when the card was dismissed. */
+function Updates({ version }: { version: string }) {
+  const u = useStore((s) => s.update);
+  useNow(30_000);
+  const last = lastChecked();
+  const v = u?.version ? `Aira ${u.version}` : "Aira";
+  const check = (
+    <button type="button" className="btn" onClick={() => checkForUpdates(true)}>
+      <Icon name="refresh" size={14} /> Check for updates
+    </button>
+  );
+  return (
+    <>
+      <div className="field">
+        <span>Installed version</span>
+        <div>Aira {version || "…"}</div>
+      </div>
+      {u?.stage === "available" && (
+        <div className="update-box">
+          <b>{v} is available</b>
+          <span className="dim">Everything keeps running while it downloads.</span>
+          {u.notes && <pre className="update-notes scroll">{u.notes}</pre>}
+          <div className="row gap">
+            <button type="button" className="btn primary" onClick={installUpdate}>Update</button>
+          </div>
+        </div>
+      )}
+      {u?.stage === "downloading" && (
+        <div className="update-box">
+          <b>Downloading {v}…</b>
+          <UpdateProgress u={u} />
+        </div>
+      )}
+      {u?.stage === "installed" && (
+        <div className="update-box">
+          <b>{v} is ready</b>
+          <span className="dim">Restart to finish. Your terminals and tabs come back as they are.</span>
+          <div className="row gap">
+            <button type="button" className="btn primary" onClick={restartForUpdate}>Restart now</button>
+          </div>
+        </div>
+      )}
+      {u?.stage === "upToDate" && <small className="green"><Icon name="check_circle" size={13} /> You're on the latest version.</small>}
+      {u?.stage === "error" && (
+        <small className="red">
+          Update failed: {u.error}{" "}
+          <button type="button" className="link-btn" onClick={dismissUpdate}>dismiss</button>
+        </small>
+      )}
+      {(!u || u.stage === "upToDate" || u.stage === "error") && <div className="row gap">{check}</div>}
+      <small className="dim">
+        Aira checks automatically every 12 hours{last ? `; last checked ${ago(last)}.` : "."} Updates download in the background and apply on the next restart.
+      </small>
+    </>
   );
 }

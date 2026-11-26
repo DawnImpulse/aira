@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { ask } from "@tauri-apps/plugin-dialog";
+import { ask } from "../lib/dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { api, type DirEntry, type Project, type Space } from "../ipc";
 import {

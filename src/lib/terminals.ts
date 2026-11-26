@@ -11,7 +11,7 @@ import { api, type HookEvent, type Project, type PtyMessage, type Script, type S
 import { dropTab, notify, openTerminalTab, projectById, scriptCwd, scriptsWindow, spaceOfPath, uid, updateConfig, useStore, type AgentStatus, type Term } from "../store";
 import { agentById, type Agent } from "./agents";
 import { openLink, popupMenu } from "./menu";
-import { ask, message } from "@tauri-apps/plugin-dialog";
+import { ask, choose } from "./dialog";
 import { emptyTree, fold, normalize, type AgentEvent, type TreeState } from "./agentEvents";
 
 // Lazy accessor: store.ts and this module import each other.
@@ -457,11 +457,7 @@ export async function confirmKill(keys: string[], title: string, intro = "") {
 export async function confirmScriptClose(key: string): Promise<"stop" | "keep" | "cancel"> {
   const t = get().terms[key];
   if (!live(t)) return "keep";
-  const r = await message(`"${t.name}" is still running.`, {
-    title: "Close terminal",
-    kind: "warning",
-    buttons: { yes: "Force close", no: "Keep running", cancel: "Cancel" },
-  });
+  const r = await choose(`"${t.name}" is still running.`, { title: "Close terminal", kind: "warning", buttons: ["Force close", "Keep running", "Cancel"] });
   return r === "Force close" ? "stop" : r === "Keep running" ? "keep" : "cancel";
 }
 

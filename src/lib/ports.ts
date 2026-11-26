@@ -1,4 +1,4 @@
-import { ask } from "@tauri-apps/plugin-dialog";
+import { ask } from "./dialog";
 import { api, type PortInfo, type Project, type Script } from "../ipc";
 import { notify, projectOf, scriptCwd, updateConfig, useStore } from "../store";
 import { stop } from "./terminals";
