@@ -218,6 +218,12 @@ export interface UsageRow {
 
 export type PtyMessage = ArrayBuffer | { exit: number };
 
+/** Subset of api.anthropic.com/api/oauth/usage: the plan's limits (weekly, per-model, session). */
+export type ClaudeUsage = {
+  seven_day: { utilization: number; resets_at: string } | null;
+  limits?: { kind: string; percent: number; severity: string; resets_at: string | null; scope: { model: { display_name: string | null } | null } | null }[];
+};
+
 export const api = {
   ptySpawn: (a: { id: string; cwd: string; command: string | null; cols: number; rows: number; env: Record<string, string> | null; onData: Channel<PtyMessage> }) =>
     invoke<number>("pty_spawn", a),
@@ -283,6 +289,7 @@ export const api = {
   aiCommitMessage: (repo: string, excludes: string[], cfg: AiCfg, paths?: string[]) =>
     invoke<string>("ai_commit_message", { repo, excludes, cfg, paths: paths ?? null }),
   aiListModels: (cfg: AiCfg) => invoke<string[]>("ai_list_models", { cfg }),
+  claudeUsage: () => invoke<ClaudeUsage>("claude_usage"),
 
   // Embedded browser: a native child webview the frontend positions over the Browser tab's body.
   // Ids: the tab id, or `<tabId>/<device>` for device-view panes.
