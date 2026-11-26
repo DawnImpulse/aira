@@ -44,6 +44,57 @@
         ],
         "createdAt": "2026-11-10T15:36:22.463Z",
         "reason": "Claude: fictional third-party shop shown in the mocked Browser tab for marketing media; meant to look like a typical store, not Aira UI"
+      },
+      {
+        "rule": "dark-glow",
+        "value": "*",
+        "files": [
+          "docs/index.html"
+        ],
+        "createdAt": "2026-11-26T05:51:57.850Z",
+        "reason": "user chose the Resq.io Dribbble shot as the example (2026-11-26); its primary button and accent tiles carry a soft accent glow, kept on purpose"
+      },
+      {
+        "rule": "clipped-overflow-container",
+        "value": "*",
+        "files": [
+          "docs/index.html"
+        ],
+        "createdAt": "2026-11-26T05:51:57.904Z",
+        "reason": "the positioned child is the pane's own pause button, inside the clipped frame by design; nothing needs to escape"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "helvetica neue",
+        "createdAt": "2026-11-26T05:51:57.950Z",
+        "reason": "fallback in the existing site stack since plan 010; the hero's spaces card uses the app's system stack because it is a picture of the app"
+      },
+      {
+        "rule": "dark-glow",
+        "value": "*",
+        "files": [
+          "docs/features.html"
+        ],
+        "createdAt": "2026-11-26T05:55:09.429Z",
+        "reason": "same sanctioned accent glow as docs/index.html: the user chose the Resq.io Dribbble shot as the example (2026-11-26)"
+      },
+      {
+        "rule": "buried-raster",
+        "value": "*",
+        "files": [
+          "docs/index.html"
+        ],
+        "createdAt": "2026-11-26T06:08:43.237Z",
+        "reason": "the hero's pane-shot images sit at opacity 0 only while inactive: site.js crossfades them in once a second, so each one does reach the screen"
+      },
+      {
+        "rule": "all-caps-body",
+        "value": "*",
+        "files": [
+          "docs/index.html"
+        ],
+        "createdAt": "2026-11-26T06:08:43.329Z",
+        "reason": "the only uppercase runs are mono eyebrow labels of a few words (section labels, fact-strip cell labels), not body text"
       }
     ]
   }

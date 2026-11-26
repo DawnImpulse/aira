@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Feedback · Aira</title>
 <meta name="description" content="Report a bug, suggest an idea or ask a question about Aira, the Mac code editor for many projects at once.">
-<meta name="theme-color" content="#0b0b0c">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0b0c" media="(prefers-color-scheme: dark)">
 <link rel="canonical" href="https://aira.codevry.com/feedback.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Aira">
@@ -22,8 +23,8 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preload" href="fonts/funnel-display-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/funnel-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="site.css?v=2">
-<script src="site.js?v=3" defer></script>
+<link rel="stylesheet" href="site.css?v=3">
+<script src="site.js?v=4" defer></script>
 <style>
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 18rem); gap: clamp(2rem, 6vw, 5rem); align-items: start; padding-bottom: clamp(5rem, 10vw, 8rem); }
   .form { display: grid; gap: 1.6rem; padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid var(--border-strong); border-radius: 18px; background: var(--panel); }
@@ -40,7 +41,7 @@
   textarea { min-height: 11rem; resize: vertical; }
   input::placeholder, textarea::placeholder { color: var(--dim); opacity: 1; }
   input:hover, textarea:hover { border-color: var(--border-hover); }
-  input:focus-visible, textarea:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgb(106 168 255 / 0.25); }
+  input:focus-visible, textarea:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
   input:user-invalid, textarea:user-invalid { border-color: var(--red); }
   fieldset { display: grid; gap: 0.6rem; margin: 0; padding: 0; border: 0; min-width: 0; }
   .kinds { display: flex; flex-wrap: wrap; gap: 0.5rem; }
@@ -53,7 +54,7 @@
   }
   .kind span::before { content: ""; width: 0.5rem; height: 0.5rem; border-radius: 50%; box-shadow: inset 0 0 0 1.5px currentColor; }
   .kind:hover span { border-color: var(--border-hover); color: var(--ink); }
-  .kind input:checked + span { border-color: var(--accent); background: rgb(106 168 255 / 0.12); color: var(--ink); }
+  .kind input:checked + span { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
   .kind input:checked + span::before { background: var(--accent); box-shadow: none; }
   .kind input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 3px; }
   .send { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
@@ -76,21 +77,25 @@
 </head>
 <body>
 <a class="skip" href="#content">Skip to content</a>
-<header class="nav">
-  <a class="brand" href="./" aria-label="Aira home"><img src="icon.svg" width="28" height="28" alt=""><span>Aira</span></a>
-  <nav class="links" aria-label="Site">
-    <a href="features.html">Features</a>
-    <a href="guide.html">Guide</a>
-    <a href="feedback.html" aria-current="page">Feedback</a>
-  </nav>
-  <a class="gh" href="https://github.com/DawnImpulse/aira" aria-label="Aira on GitHub">
-    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-  </a>
-  <a class="btn primary small" href="https://github.com/DawnImpulse/aira/releases/latest" data-download>Download for Mac</a>
-</header>
+<nav class="nav" aria-label="Site">
+  <div class="pill">
+    <a class="brand" href="./" aria-label="Aira home"><img src="icon.svg" width="28" height="28" alt=""><span>Aira</span></a>
+    <div class="links">
+      <a href="features.html">Features</a>
+      <a href="guide.html">Guide</a>
+      <a href="feedback.html" aria-current="page">Feedback</a>
+    </div>
+    <div class="end">
+      <a class="gh" href="https://github.com/DawnImpulse/aira" aria-label="Aira on GitHub">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      </a>
+      <a class="btn primary small" href="https://github.com/DawnImpulse/aira/releases/latest" data-download>Download for Mac</a>
+    </div>
+  </div>
+</nav>
 
 <main id="content">
-  <header class="page-head wrap" style="--h:330">
+  <header class="page-head wrap">
     <h1>Feedback</h1>
     <p class="lead">Aira is an early preview, so bugs, rough edges and ideas all help. Tell me what happened or what you wish it did.</p>
   </header>
@@ -141,15 +146,19 @@
   </div>
 </main>
 
-<footer class="foot wrap">
-  <a class="brand" href="./"><img src="icon.svg" width="24" height="24" alt="">Aira</a>
-  <nav aria-label="Footer">
-    <a href="features.html">Features</a>
-    <a href="guide.html">Guide</a>
-    <a href="feedback.html">Feedback</a>
-    <a href="https://github.com/DawnImpulse/aira">GitHub</a>
-  </nav>
-  <p>Open source under the <a href="https://github.com/DawnImpulse/aira/blob/main/LICENSE">MIT license</a>. Built with Tauri, React, Monaco and xterm.js. Screenshots and recordings show demo projects.</p>
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div>
+        <a class="brand" href="./"><img src="icon.svg" width="28" height="28" alt="">Aira</a>
+        <p>A Mac code editor that keeps every open project's servers, agents, git and a multi-device browser running side by side.</p>
+      </div>
+      <div><p class="label">Product</p><ul><li><a href="features.html">Features</a></li><li><a href="guide.html">Guide</a></li><li><a href="feedback.html">Feedback</a></li><li><a href="https://github.com/DawnImpulse/aira/releases/latest" data-download>Download for Mac</a></li></ul></div>
+      <div><p class="label">Source</p><ul><li><a href="https://github.com/DawnImpulse/aira">GitHub</a></li><li><a href="https://github.com/DawnImpulse/aira/releases">Releases</a></li><li><a href="https://github.com/DawnImpulse/aira/blob/main/LICENSE">MIT license</a></li><li><a href="https://github.com/DawnImpulse/aira/blob/main/src/assets/agents/NOTICE.md">Logo notice</a></li></ul></div>
+      <div><p class="label">Built with</p><ul><li>Tauri</li><li>React</li><li>Monaco</li><li>xterm.js</li></ul></div>
+    </div>
+    <div class="fine"><span>© 2026 Saksham · MIT license</span><span>Screenshots show demo projects.</span></div>
+  </div>
 </footer>
 
 <script>

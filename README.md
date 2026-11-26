@@ -44,7 +44,7 @@ Rust tests: `cd src-tauri && cargo test`
 
 Coding agents aren't bundled: install the CLIs you use and Aira finds them on your PATH.
 
-Screenshots in `docs/screenshots` and the recordings in `docs/media` come from `bun run screenshots` and `bun run clips` (demo data; needs `bun run dev` running and ffmpeg for clips, see `scripts/screenshots/`).
+Screenshots in `docs/screenshots` come from `bun run screenshots` (demo data; needs `bun run dev` running, see `scripts/screenshots/`). The stills in `docs/media` are older captures kept as static images.
 
 ## Status
 
