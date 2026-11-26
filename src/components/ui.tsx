@@ -95,7 +95,16 @@ export function useNow(ms = 30_000) {
 
 /** Small circular loader (CSS; stills itself under prefers-reduced-motion). */
 export function Spinner({ size = 12, color, title }: { size?: number; color?: string; title?: string }) {
-  return <span className="spinner" style={{ width: size, height: size, color }} title={title} role="status" aria-label={title ?? "Loading"} />;
+  // Negative delay = time since page load, so every spinner shares one phase regardless of when it mounted.
+  return (
+    <span
+      className="spinner"
+      style={{ width: size, height: size, color, animationDelay: `-${Math.round(performance.now())}ms` }}
+      title={title}
+      role="status"
+      aria-label={title ?? "Loading"}
+    />
+  );
 }
 
 const imageUrls = new Map<string, Promise<string>>();

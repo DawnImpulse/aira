@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { PortInfo, Project } from "../ipc";
+import { api, type ClaudeUsage, type PortInfo, type Project } from "../ipc";
 import { ago, formatBytes, isFailed, focusTerminal, projectById, repoOf, selectActiveSpace, useStore, type Term } from "../store";
 import { removeTerm, renameTerm, stop as stopTerm } from "../lib/terminals";
 import { expectedPorts, freePort, projectOfPort, refreshPorts, termOfPort, type Expected } from "../lib/ports";
@@ -49,6 +49,7 @@ export function StatusBar() {
             <Icon name="system_update_alt" size={13} /> {update.stage === "installed" ? "Restart to update" : `Update ${update.version}`}
           </button>
         )}
+        <ClaudeUsageItem />
         <span title={`App ${formatBytes(mem.app)} + terminals ${formatBytes(termMem)} (resident memory)`}>
           <Icon name="memory" size={13} /> {formatBytes(mem.app + termMem)}
         </span>
@@ -60,7 +61,7 @@ export function StatusBar() {
         </div>
         <div className="popover-anchor">
           <button className={cx("status-btn", noticesOpen && "on")} onClick={() => setNoticesOpen(!noticesOpen)} title="Agent notifications: finished, needs input, exited">
-            <Icon name={unseen ? "notifications_unread" : "notifications"} size={13} className={unseen ? "amber" : undefined} />
+            <Icon name="notifications" size={13} className={unseen ? "amber ring" : undefined} />
             {unseen > 0 && unseen}
           </button>
           {noticesOpen && <NoticesPopover onClose={() => setNoticesOpen(false)} />}
@@ -73,6 +74,72 @@ export function StatusBar() {
         </div>
       </div>
     </footer>
+  );
+}
+
+const USAGE_EVERY = 5 * 60 * 1000;
+
+/** `limits[]` rows as labelled percentages: Week (all models), per-model (Fable), Session. */
+function usageRows(u: ClaudeUsage) {
+  const rows = (u.limits ?? []).map((l) => ({
+    label: l.kind === "weekly_all" ? "Week" : l.kind === "five_hour" ? "Session" : (l.scope?.model?.display_name ?? l.kind),
+    percent: l.percent,
+    warn: l.severity !== "normal" || l.percent >= 80,
+    resetsAt: l.resets_at,
+  }));
+  if (!rows.length && u.seven_day) rows.push({ label: "Week", percent: u.seven_day.utilization, warn: u.seven_day.utilization >= 80, resetsAt: u.seven_day.resets_at });
+  return rows;
+}
+
+function resetsIn(iso: string | null) {
+  if (!iso) return "";
+  const s = Math.max(0, (new Date(iso).getTime() - Date.now()) / 1000);
+  return s < 3600 ? `resets in ${Math.ceil(s / 60)}m` : s < 86400 ? `resets in ${Math.round(s / 3600)}h` : `resets in ${Math.floor(s / 86400)}d ${Math.round((s % 86400) / 3600)}h`;
+}
+
+/** Claude plan usage like Orca's: weekly and Fable percentages, refreshed every few minutes. */
+function ClaudeUsageItem() {
+  const [usage, setUsage] = useState<ClaudeUsage>();
+  const [error, setError] = useState<string>();
+  const [open, setOpen] = useState(false);
+  const refresh = () => api.claudeUsage().then((u) => (setUsage(u), setError(undefined)), (e) => setError(String(e)));
+  useEffect(() => {
+    refresh();
+    const t = setInterval(refresh, USAGE_EVERY);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => void (open && refresh()), [open]);
+  const rows = usage ? usageRows(usage) : [];
+  const label = rows.length ? rows.map((r) => `${r.label === "Week" ? "" : `${r.label} `}${Math.round(r.percent)}%`).join(" · ") : error ? "Claude" : "…";
+  return (
+    <div className="popover-anchor">
+      <button className={cx("status-btn", open && "on", rows.some((r) => r.warn) && "amber", !rows.length && "dim")} onClick={() => setOpen(!open)} title={error ?? "Claude plan usage"}>
+        <Icon name="data_usage" size={13} /> {label}
+      </button>
+      {open && <UsagePopover rows={rows} error={error} onClose={() => setOpen(false)} />}
+    </div>
+  );
+}
+
+function UsagePopover({ rows, error, onClose }: { rows: ReturnType<typeof usageRows>; error?: string; onClose: () => void }) {
+  const ref = useOutsideClose(onClose);
+  useOverlay(true);
+  return (
+    <div className="popover up usage-popover" ref={ref}>
+      <div className="menu-label">Claude usage</div>
+      {error && <div className="empty-note">{error}</div>}
+      {!error && !rows.length && <div className="empty-note">Loading…</div>}
+      {rows.map((r) => (
+        <div key={r.label} className="usage-row" title={r.resetsAt ? new Date(r.resetsAt).toLocaleString() : undefined}>
+          <span>{r.label}</span>
+          <div className="usage-bar">
+            <div className={cx("usage-fill", r.warn && "warn")} style={{ width: `${Math.min(100, r.percent)}%` }} />
+          </div>
+          <span className={cx("mono", r.warn && "amber")}>{Math.round(r.percent)}%</span>
+          <span className="dim">{resetsIn(r.resetsAt)}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -196,7 +263,7 @@ function NoticesPopover({ onClose }: { onClose: () => void }) {
         >
           <AgentIcon agent={terms[n.key]?.agent} size={14} />
           <span className="ellipsis">
-            {n.title} – {n.body}
+            {n.body} · {n.title}
           </span>
           <span className="dim">{ago(n.at)}</span>
         </div>

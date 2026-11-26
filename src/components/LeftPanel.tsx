@@ -126,7 +126,8 @@ function ProjectSection({ project: p }: { project: Project }) {
             {p.name}
           </span>
         )}
-        {unseen && <Icon name="notifications_unread" size={14} className="amber" title="An agent needs you here" />}
+        {unseen && <Icon name="notifications" size={14} className="amber ring" title="An agent needs you here" />}
+        <span className="spacer" />
         <span className="hover-actions">
           <IconButton icon="library_add" title="Add space" onClick={stop(() => openSpaceDialog(p.id))} />
           <IconButton icon="settings" title="Project settings (name, icon, color, remove)" onClick={stop(() => useStore.setState({ dialog: { kind: "project", projectId: p.id } }))} />
@@ -180,7 +181,7 @@ function SpaceCard({ project, space, showProject }: { project: Project; space: S
           </span>
         )}
         {(running || failed) && <span className={cx("dot", running ? "green" : "red")} title={running ? "Scripts running" : "A script failed"} />}
-        {finishedUnseen && <Icon name="notifications_unread" size={14} className="amber" title="An agent needs you here" />}
+        {finishedUnseen && <Icon name="notifications" size={14} className="amber ring" title="An agent needs you here" />}
         <span className="spacer" />
         <span className="hover-actions">
           {space.asleep ? (
@@ -306,7 +307,7 @@ function AgentRow({ t, st }: { t: Term; st?: AgentStatus }) {
           {usageLabel(usage)}
         </span>
       )}
-      {st?.unseen && <Icon name="notifications_unread" size={13} className="amber" title="Needs you – not seen yet" />}
+      {st?.unseen && <Icon name="notifications" size={13} className="amber ring" title="Needs you – not seen yet" />}
       <span className="age">{ago(live ? (st?.since ?? t.startedAt) : t.endedAt)}</span>
     </div>
   );
@@ -411,7 +412,7 @@ function ProjectScripts({ project: p }: { project: Project }) {
           size={14}
           onClick={stop(() => updateProject(p.id, { scriptsCollapsed: open }))}
         />
-        <span>Scripts{!open && p.scriptIds.length ? ` (${p.scriptIds.length})` : ""}</span>
+        <span>Scripts{running ? ` (${running} running)` : ""}</span>
         <span className="hover-actions always" onClick={(e) => e.stopPropagation()}>
           {running ? (
             <IconButton icon="stop" title={`Stop all scripts (${running} running)`} className="red" onClick={() => stopAllScripts(p.id)} />

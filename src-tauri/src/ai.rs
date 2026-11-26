@@ -290,6 +290,35 @@ pub async fn ai_commit_message(repo: String, excludes: Vec<String>, cfg: AiCfg, 
 }
 
 /// Model ids from the provider's official list endpoint.
+/// Claude plan usage (weekly / per-model limits) for the account `claude` is signed into. The OAuth
+/// token is read through `security` (the item's ACL already allows it, so no Keychain prompt) and
+/// stays in Rust; the webview only sees the usage JSON. Claude Code rotates the token itself, so a
+/// stale one heals the next time `claude` runs.
+#[tauri::command]
+pub async fn claude_usage() -> Result<Value, String> {
+    let out = Command::new("/usr/bin/security")
+        .args(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        return Err("Not signed in: run `claude` once in a terminal.".into());
+    }
+    let creds: Value = serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())?;
+    let token = creds["claudeAiOauth"]["accessToken"].as_str().ok_or("No Claude OAuth token in the Keychain.")?;
+    let resp = client()
+        .get("https://api.anthropic.com/api/oauth/usage")
+        .bearer_auth(token)
+        .header("anthropic-beta", "oauth-2025-04-20")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if matches!(resp.status().as_u16(), 401 | 403) {
+        return Err("Claude sign-in expired: run `claude` once to refresh it.".into());
+    }
+    read_json(resp, "Claude usage").await
+}
+
 #[tauri::command]
 pub async fn ai_list_models(cfg: AiCfg) -> Result<Vec<String>, String> {
     let key = key_for(&cfg).await?;
@@ -412,6 +441,15 @@ mod tests {
         assert_eq!(e.get_password().unwrap(), "not-a-real-key");
         e.delete_credential().unwrap();
         assert!(e.get_password().is_err());
+    }
+
+    /// Hits the real Keychain and api.anthropic.com with the signed-in `claude` account, so it only
+    /// runs on demand: `cargo test -- --ignored claude_usage`.
+    #[tokio::test]
+    #[ignore]
+    async fn claude_usage_live() {
+        let u = claude_usage().await.unwrap();
+        assert!(!u["limits"].as_array().unwrap().is_empty(), "{u}");
     }
 
     #[tokio::test]
