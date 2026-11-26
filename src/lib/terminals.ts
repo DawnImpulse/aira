@@ -2,14 +2,15 @@ import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { SerializeAddon } from "@xterm/addon-serialize";
+import { appConfigDir, join } from "@tauri-apps/api/path";
 import { Channel } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
 import { api, type HookEvent, type Project, type PtyMessage, type Script, type Settings } from "../ipc";
 import { dropTab, notify, openTerminalTab, projectById, scriptCwd, scriptsWindow, spaceOfPath, uid, updateConfig, useStore, type AgentStatus, type Term } from "../store";
 import { agentById, type Agent } from "./agents";
-import { popupMenu } from "./menu";
+import { openLink, popupMenu } from "./menu";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { emptyTree, fold, normalize, type AgentEvent, type TreeState } from "./agentEvents";
 
@@ -35,7 +36,33 @@ interface XT {
   el: HTMLDivElement;
   opened: boolean;
   webgl: WebglAddon | null;
+  /** kitty keyboard protocol flag stack (top = active); [0] = legacy encoding. */
+  kitty: number[];
 }
+
+// ---------- kitty keyboard protocol ----------
+// xterm.js has none, so a TUI can't tell Ctrl+Enter or Shift+Enter from Enter and Claude Code falls back to its
+// ctrl+x ctrl+s chord. Answering the query (CSI ? u) and encoding keys as CSI u while flags are pushed gives it
+// ctrl+enter to send now, shift+enter for a newline and an unambiguous Esc, as in Orca or Ghostty.
+// https://sw.kovidgoyal.net/kitty/keyboard-protocol/
+const KITTY_SPECIAL: Record<string, number> = { Escape: 27, Enter: 13, Tab: 9, Backspace: 127 };
+
+/** CSI u encoding for a keydown under the "disambiguate" flag, or null when the legacy bytes are right. */
+function kittyEncode(e: KeyboardEvent): string | null {
+  // Cmd+Enter counts as Ctrl+Enter (Claude Code's "send now"): super+enter is bound nowhere, and Orca users expect it.
+  const ctrl = e.ctrlKey || (e.metaKey && e.key === "Enter");
+  const mods = 1 + (e.shiftKey ? 1 : 0) + (e.altKey ? 2 : 0) + (ctrl ? 4 : 0);
+  const special = KITTY_SPECIAL[e.key];
+  if (special) {
+    if (e.key !== "Escape" && mods === 1) return null; // plain Enter/Tab/Backspace stay legacy per spec
+    return `\x1b[${special}${mods > 1 ? `;${mods}` : ""}u`;
+  }
+  if (e.metaKey || (!e.ctrlKey && !e.altKey) || e.key.length !== 1) return null; // Cmd shortcuts, plain text, other keys
+  return `\x1b[${e.key.toLowerCase().codePointAt(0)};${mods}u`;
+}
+
+/** Ctrl+C / Esc, in legacy or CSI u form. */
+const isInterrupt = (d: string) => d === "\x03" || d === "\x1b" || /^\x1b\[(27|99;5)(;\d+)?u$/.test(d);
 
 const xts = new Map<string, XT>();
 let theme = DARK;
@@ -68,16 +95,49 @@ function xterm(key: string): XT {
     cursorBlink: true,
     macOptionIsMeta: true,
     allowProposedApi: true,
+    linkHandler: { activate: (_e, uri) => void openLink(uri) }, // OSC 8 hyperlinks; WebLinksAddon covers plain-text URLs
   });
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
-  term.loadAddon(new WebLinksAddon((_e, uri) => void openUrl(uri)));
+  term.loadAddon(new WebLinksAddon((_e, uri) => void openLink(uri)));
+  const live = () => {
+    const t = get().terms[key];
+    return t?.sessionId && t.status === "running" ? t.sessionId : null;
+  };
+  const send = (d: string) => {
+    const id = live();
+    if (id) api.ptyWrite(id, d).catch(() => {});
+  };
+  const kitty = [0];
+  const num = (v: number | number[] | undefined) => (typeof v === "number" ? v : Array.isArray(v) ? (v[0] ?? 0) : 0);
+  const top = () => kitty[kitty.length - 1];
+  term.parser.registerCsiHandler({ prefix: "?", final: "u" }, () => (send(`\x1b[?${top()}u`), true));
+  term.parser.registerCsiHandler({ prefix: ">", final: "u" }, (p) => (kitty.push(num(p[0])), true));
+  term.parser.registerCsiHandler({ prefix: "<", final: "u" }, (p) => {
+    for (let n = num(p[0]) || 1; n > 0 && kitty.length > 1; n--) kitty.pop();
+    return true;
+  });
+  term.parser.registerCsiHandler({ prefix: "=", final: "u" }, (p) => {
+    const f = num(p[0]);
+    const mode = num(p[1]) || 1;
+    kitty[kitty.length - 1] = mode === 1 ? f : mode === 2 ? top() | f : top() & ~f;
+    return true;
+  });
   term.attachCustomKeyEventHandler((e) => {
     // WebKit also fires keypress for Shift+Enter; left to xterm, that sends a second CR after ours (= submit).
     if (e.type !== "keydown") return !(e.key === "Enter" && e.shiftKey);
     if (e.metaKey && e.key === "k") {
       term.clear();
       return false;
+    }
+    if (top() & 1) {
+      const enc = kittyEncode(e);
+      if (enc) {
+        lastIn.set(key, Date.now());
+        if (isInterrupt(enc)) interrupted(key);
+        send(enc);
+        return false;
+      }
     }
     // Shift+Enter in an agent terminal = new line, not submit. ESC CR (Option+Enter) is what Claude Code's own
     // /terminal-setup binds in VS Code and Alacritty (a bare LF counts as Enter there); Gemini CLI reads backslash + Enter.
@@ -86,23 +146,22 @@ function xterm(key: string): XT {
       term.input(agent === "claude" ? "\x1b\r" : "\\\r");
       return false;
     }
-    // Ctrl+Enter: xterm.js sends a plain CR for it (no kitty keyboard protocol), so Claude Code would see Enter.
-    // Send the ctrl+x ctrl+s chord instead (its other default for chat:sendNow), as two writes so the input
-    // parser sees two keys, not one unknown sequence.
-    if (e.ctrlKey && e.key === "Enter" && agent === "claude") {
-      term.input("\x18");
-      setTimeout(() => term.input("\x13"), 10);
+    // Ctrl+Enter / Cmd+Enter before Claude Code has pushed its keyboard flags (it asks at startup; a session
+    // reattached after a restart answers nothing): a plain CR would read as Enter, so send its ctrl+x ctrl+s
+    // chord, as two ordered writes so the input parser sees two keys, not one unknown sequence.
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && agent === "claude") {
+      const id = live();
+      if (id) {
+        lastIn.set(key, Date.now());
+        api.ptyWrite(id, "\x18").then(() => api.ptyWrite(id, "\x13")).catch(() => {});
+      }
       return false;
     }
     return true;
   });
-  const live = () => {
-    const t = get().terms[key];
-    return t?.sessionId && t.status === "running" ? t.sessionId : null;
-  };
   term.onData((d) => {
     lastIn.set(key, Date.now());
-    if (d === "\x03" || d === "\x1b") interrupted(key); // Ctrl+C / Esc
+    if (isInterrupt(d)) interrupted(key); // Ctrl+C / Esc
     else answered(key); // typing at a "Needs input" prompt: the agent is working again until its next status hook
     const id = live();
     if (id) api.ptyWrite(id, d).catch(() => {});
@@ -141,7 +200,7 @@ function xterm(key: string): XT {
     },
     true,
   );
-  const x: XT = { term, fit: fitAddon, el, opened: false, webgl: null };
+  const x: XT = { term, fit: fitAddon, el, opened: false, webgl: null, kitty };
   xts.set(key, x);
   hookFileDrops();
   return x;
@@ -230,6 +289,7 @@ export async function startSession(key: string) {
   const t = get().terms[key];
   if (!t || t.status === "running" || t.status === "stopping") return;
   const x = xterm(key);
+  x.kitty.splice(0, x.kitty.length, 0); // a new program starts in legacy encoding
   if (t.sessionId) x.term.write("\r\n\x1b[2m── restarted ──\x1b[0m\r\n");
   const sessionId = uid();
   const now = Date.now();
@@ -239,8 +299,19 @@ export async function startSession(key: string) {
     updateConfig((c) => {
       if (c.scripts[scriptId]) c.scripts[scriptId].lastRunAt = now;
     });
+  try {
+    const { command, env } = await withAgentHooks(t);
+    await api.ptySpawn({ id: sessionId, cwd: t.cwd, command, cols: x.term.cols, rows: x.term.rows, env, onData: channelFor(key, sessionId, x) });
+  } catch (e) {
+    x.term.write(`\r\n\x1b[31mFailed to start: ${e}\x1b[0m\r\n`);
+    setTerm(key, { status: "exited", exitCode: -1, endedAt: Date.now() });
+  }
+}
+
+/** Output of `sessionId` into the terminal, acked in chunks for the Rust side's flow control; the exit message ends it. */
+function channelFor(key: string, sessionId: string, x: XT) {
   let unacked = 0;
-  const channel = new Channel<PtyMessage>((msg) => {
+  return new Channel<PtyMessage>((msg) => {
     if (msg instanceof ArrayBuffer) {
       lastOut.set(key, Date.now());
       const bytes = new Uint8Array(msg);
@@ -253,11 +324,66 @@ export async function startSession(key: string) {
       });
     } else onExit(key, sessionId, msg.exit);
   });
+}
+
+// ---------- relaunch handoff (plan 015) ----------
+
+type Handoff = { sessionId: string; startedAt?: number; scrollback: string; hooked: boolean; kitty?: number[] };
+const handoffPath = async () => join(await appConfigDir(), "handoff.json");
+let inheritedIds = new Set<string>();
+
+/** Before a relaunch: which session each live terminal runs and what is on its screen, for `attachInherited`. */
+export async function writeHandoff() {
+  const out: Record<string, Handoff> = {};
+  for (const t of Object.values(get().terms)) {
+    if (!live(t)) continue;
+    const x = xts.get(t.key);
+    let scrollback = "";
+    if (x) {
+      const s = new SerializeAddon();
+      x.term.loadAddon(s);
+      scrollback = s.serialize({ scrollback: 2000 });
+      s.dispose();
+    }
+    out[t.key] = { sessionId: t.sessionId!, startedAt: t.startedAt, scrollback, hooked: hooked.has(t.key), kitty: x?.kitty };
+  }
+  await api.writeFile(await handoffPath(), JSON.stringify(out));
+}
+
+/** At boot: what the previous process saved about the sessions it handed over, keyed by terminal; only
+ * sessions the Rust side actually holds count, so a stale file is inert. */
+export async function readHandoff(): Promise<Record<string, Handoff>> {
+  inheritedIds = new Set(await api.ptyInherited().catch(() => [] as string[]));
+  if (!inheritedIds.size) return {};
+  let saved: Record<string, Handoff> = {};
   try {
-    const { command, env } = await withAgentHooks(t);
-    await api.ptySpawn({ id: sessionId, cwd: t.cwd, command, cols: x.term.cols, rows: x.term.rows, env, onData: channel });
+    saved = JSON.parse(await api.readFile(await handoffPath()));
+  } catch {
+    /* no file: nothing to reattach */
+  }
+  return Object.fromEntries(Object.entries(saved).filter(([, h]) => inheritedIds.has(h.sessionId)));
+}
+
+/** Reattaches the terminals `boot` marked running from the handoff. A session no tab claims is ended. */
+export function attachInherited(handoff: Record<string, Handoff>) {
+  const claimed = new Set<string>();
+  for (const [key, h] of Object.entries(handoff)) {
+    if (get().terms[key]?.sessionId !== h.sessionId) continue;
+    claimed.add(h.sessionId);
+    void attachSession(key, h);
+  }
+  for (const id of inheritedIds) if (!claimed.has(id)) api.ptyKill(id).catch(() => {}); // its tab was closed before the relaunch
+}
+
+async function attachSession(key: string, h: Handoff) {
+  const x = xterm(key);
+  if (h.scrollback) x.term.write(h.scrollback);
+  if (h.kitty?.length) x.kitty.splice(0, Infinity, ...h.kitty); // the program keeps expecting CSI u keys
+  if (h.hooked) hooked.add(key); // keep reading the agent's hook events
+  try {
+    await api.ptyAttach({ id: h.sessionId, cols: x.term.cols, rows: x.term.rows, onData: channelFor(key, h.sessionId, x) });
   } catch (e) {
-    x.term.write(`\r\n\x1b[31mFailed to start: ${e}\x1b[0m\r\n`);
+    x.term.write(`\r\n\x1b[31mCould not reattach: ${e}\x1b[0m\r\n`);
     setTerm(key, { status: "exited", exitCode: -1, endedAt: Date.now() });
   }
 }
@@ -271,6 +397,7 @@ function onExit(key: string, sessionId: string, code: number) {
   if (!t.scriptId && !t.command && !sleeping.delete(key)) return removeTerm(key, true);
   if (t.agent && t.status !== "stopping") notifyAgent(key, code === 0 ? "Exited" : `Exited with code ${code}`);
   const stopped = t.status === "stopping";
+  xts.get(key)?.kitty.splice(0, Infinity, 0);
   xts.get(key)?.term.write(`\r\n\x1b[2m[${stopped ? "stopped" : `process exited with code ${code}`}]\x1b[0m\r\n`);
   setTerm(key, { status: "exited", exitCode: code, endedAt: Date.now(), stopped });
 }
@@ -428,6 +555,7 @@ export function stopAllScripts(projectId: string) {
 
 const lastOut = new Map<string, number>();
 const lastIn = new Map<string, number>();
+const QUIET_MS = 20_000; // longest an agent that is working goes without redrawing its spinner, with margin
 
 // ponytail: activity heuristic. Agent TUIs animate a spinner while working and sit still while
 // waiting for you. Output right after input (typing echo, resize redraw) doesn't count, and
@@ -446,7 +574,14 @@ setInterval(() => {
     if (!t.agent || t.status !== "running") continue;
     if (hooked.has(t.key)) {
       pollHooks(t.key); // exact status + subagents from Claude hooks
-      if (hookActive.has(t.key)) continue;
+      if (hookActive.has(t.key)) {
+        // No Stop hook comes when a turn dies on an API error ("Connection lost mid-response") or a crash, which
+        // pinned Working for good. The agent's spinner redraws constantly while it really works (even during a
+        // long tool call), so a long silence means the turn is over: hand status back to the heuristic.
+        const quiet = agentStatus[t.key]?.state === "working" && now - (lastOut.get(t.key) ?? now) > QUIET_MS;
+        if (!quiet) continue;
+        hookActive.delete(t.key);
+      }
     }
     const out = lastOut.get(t.key) ?? 0;
     const inp = lastIn.get(t.key);

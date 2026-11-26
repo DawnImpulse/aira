@@ -218,6 +218,12 @@ export interface UsageRow {
 
 export type PtyMessage = ArrayBuffer | { exit: number };
 
+/** Subset of api.anthropic.com/api/oauth/usage: the plan's limits (weekly, per-model, session). */
+export type ClaudeUsage = {
+  seven_day: { utilization: number; resets_at: string } | null;
+  limits?: { kind: string; percent: number; severity: string; resets_at: string | null; scope: { model: { display_name: string | null } | null } | null }[];
+};
+
 export const api = {
   ptySpawn: (a: { id: string; cwd: string; command: string | null; cols: number; rows: number; env: Record<string, string> | null; onData: Channel<PtyMessage> }) =>
     invoke<number>("pty_spawn", a),
@@ -226,6 +232,11 @@ export const api = {
   ptyAck: (id: string, bytes: number) => invoke("pty_ack", { id, bytes }),
   ptyKill: (id: string) => invoke("pty_kill", { id }),
   ptyBusy: (ids: string[]) => invoke<string[]>("pty_busy", { ids }),
+  /** Sessions handed over by the previous process (plan 015), waiting for `ptyAttach`. */
+  ptyInherited: () => invoke<string[]>("pty_inherited"),
+  ptyAttach: (a: { id: string; cols: number; rows: number; onData: Channel<PtyMessage> }) => invoke<number>("pty_attach", a),
+  /** Relaunches Aira with every live shell handed to the new process. */
+  relaunch: () => invoke("relaunch"),
   portsList: () => invoke<PortInfo[]>("ports_list"),
   killPid: (pid: number) => invoke("kill_pid", { pid }),
   quit: () => invoke("quit_app"),
@@ -278,6 +289,7 @@ export const api = {
   aiCommitMessage: (repo: string, excludes: string[], cfg: AiCfg, paths?: string[]) =>
     invoke<string>("ai_commit_message", { repo, excludes, cfg, paths: paths ?? null }),
   aiListModels: (cfg: AiCfg) => invoke<string[]>("ai_list_models", { cfg }),
+  claudeUsage: () => invoke<ClaudeUsage>("claude_usage"),
 
   // Embedded browser: a native child webview the frontend positions over the Browser tab's body.
   // Ids: the tab id, or `<tabId>/<device>` for device-view panes.

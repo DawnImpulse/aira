@@ -5,10 +5,10 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, type Config, type FileEntry, type GitStatus, type PortInfo, type Project, type Repo, type Script, type Space, type SpaceView, type Tab, type TermSnapshot, type UsageRow } from "./ipc";
 import { disposeModel, reloadIfClean, setEditorTheme } from "./lib/monaco";
-import { busyTerms, confirmKill, confirmScriptClose, newTerminal, removeTerm, runningList, setTerminalTheme, sleepTerm, startSession, stop as stopTerm } from "./lib/terminals";
+import { attachInherited, busyTerms, confirmKill, confirmScriptClose, newTerminal, readHandoff, removeTerm, runningList, setTerminalTheme, sleepTerm, startSession, stop as stopTerm, writeHandoff } from "./lib/terminals";
 import { nextIdentity } from "./lib/identity";
 import { AGENTS } from "./lib/agents";
-import { checkForUpdates, scheduleUpdateChecks } from "./lib/updates";
+import { checkForUpdates, scheduleUpdateChecks, type UpdateState } from "./lib/updates";
 
 export interface Term extends TermSnapshot {
   sessionId?: string;
@@ -76,6 +76,7 @@ interface State {
   restore: string[]; // script ids running at last quit
   ports: PortInfo[]; // listening TCP ports (lib/ports)
   toast: string | null;
+  update: UpdateState | null; // the bottom-right update card (lib/updates)
   overlays: number; // open popovers/menus; the embedded browser webview hides while any are up
   popped: Record<string, true>; // browser tab id → its page is in a pop-out window (not persisted)
 }
@@ -128,6 +129,7 @@ export const useStore = create<State>(() => ({
   restore: [],
   ports: [],
   toast: null,
+  update: null,
   overlays: 0,
   popped: {},
 }));
@@ -953,7 +955,8 @@ export function scriptCwd(s: Script) {
 // ---------- boot / app events ----------
 
 let quitting = false;
-async function onQuitRequested() {
+/** Confirms busy terminals / unsaved files, saves state, then `then` ends the process (quit, or relaunch after an update). */
+export async function quitApp(then: () => Promise<unknown> = api.quit) {
   if (quitting) return;
   quitting = true;
   try {
@@ -966,7 +969,29 @@ async function onQuitRequested() {
     if (lines.length && !(await ask(lines.join("\n\n"), { title: "Quit Aira?", kind: "warning", okLabel: busy.length ? "Force close & quit" : "Quit" }))) return;
     updateConfig((c) => void (c.layout.runningAtQuit = running.flatMap((t) => (t.scriptId ? [t.scriptId] : []))));
     await saveNow();
-    await api.quit();
+    await then();
+  } finally {
+    quitting = false;
+  }
+}
+
+/**
+ * Relaunches Aira without stopping anything: the new process inherits the live shells (pty.rs `relaunch`),
+ * their scrollback comes back from the handoff file and tabs reopen on their pages. After an update this
+ * is what starts the new version.
+ */
+export async function restartApp() {
+  if (quitting) return;
+  quitting = true;
+  try {
+    const dirty = Object.values(get().dirty).filter(Boolean).length;
+    if (dirty && !(await ask(`${dirty} file${dirty > 1 ? "s have" : " has"} unsaved changes that will be lost.`, { title: "Restart Aira?", kind: "warning", okLabel: "Restart" }))) return;
+    await writeHandoff();
+    updateConfig((c) => void (c.layout.runningAtQuit = [])); // nothing to re-run: the scripts stay alive
+    await saveNow();
+    await api.relaunch();
+  } catch (e) {
+    notify(`Restart failed: ${e}`);
   } finally {
     quitting = false;
   }
@@ -976,6 +1001,7 @@ function onMenu(id: string) {
   const { config } = get();
   if (id === "settings") set({ dialog: { kind: "settings" } });
   else if (id === "check-updates") checkForUpdates(true);
+  else if (id === "restart") restartApp();
   else if (id === "open-folder") openFolders();
   else if (id === "new-terminal") {
     const p = activeProject();
@@ -988,10 +1014,19 @@ function onMenu(id: string) {
 
 export async function boot() {
   const config = normalize(await api.loadConfig().catch(() => null));
-  const terms: Record<string, Term> = Object.fromEntries(config.layout.terms.map((t) => [t.key, { ...t, status: "idle" as const }]));
+  // Terminals handed over by the previous process (a restart for an update) are running already: marked so
+  // before any tab mounts, or a shell would be started on top of the one being reattached.
+  const handoff = await readHandoff();
+  const terms: Record<string, Term> = Object.fromEntries(
+    config.layout.terms.map((t) => {
+      const h = handoff[t.key];
+      return [t.key, h ? { ...t, status: "running" as const, sessionId: h.sessionId, startedAt: h.startedAt ?? Date.now() } : { ...t, status: "idle" as const }];
+    }),
+  );
   const restore = config.layout.runningAtQuit.filter((id) => config.scripts[id]);
   config.layout.runningAtQuit = [];
   set({ config, terms, restore, ready: true });
+  attachInherited(handoff);
   applySettings();
   media.addEventListener("change", applySettings);
   scheduleUpdateChecks();
@@ -1023,7 +1058,7 @@ export async function boot() {
     if (e.payload.procs) detectAgents(e.payload.procs);
   });
   listen<string>("menu", (e) => onMenu(e.payload));
-  listen("quit-requested", onQuitRequested);
+  listen("quit-requested", () => quitApp());
   listen<string>("notification-clicked", (e) => e.payload && focusTerminal(e.payload)); // no key: the Settings test banner
   listen<string>("browser:docked", (e) => set((s) => ({ popped: omit(s.popped, e.payload) })));
 }

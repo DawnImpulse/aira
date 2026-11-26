@@ -10,7 +10,7 @@ use tauri::{AppHandle, Emitter, Manager};
 /// Writes the hook's stdin JSON to its own file (mktemp → write → mv, so readers only ever see
 /// complete `*.json` files). Prints nothing and always exits 0, so it can't influence Claude.
 const HOOK_CMD: &str =
-    r#"[ -n "$IDE_AGENT_EVENTS" ] && f=$(mktemp "$IDE_AGENT_EVENTS/e.XXXXXX") && cat > "$f" && mv "$f" "$f.json"; exit 0"#;
+    r#"[ -n "$IDE_AGENT_EVENTS" ] && mkdir -p "$IDE_AGENT_EVENTS" && f=$(mktemp "$IDE_AGENT_EVENTS/e.XXXXXX") && cat > "$f" && mv "$f" "$f.json"; exit 0"#;
 
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -33,7 +33,7 @@ fn events_dir(app: &AppHandle, key: &str) -> Result<PathBuf, String> {
 /// payloads don't name the event (one command per event, so the event name is known here).
 fn tagged_cmd(event: &str) -> String {
     format!(
-        r#"[ -n "$IDE_AGENT_EVENTS" ] && f=$(mktemp "$IDE_AGENT_EVENTS/e.XXXXXX") && {{ printf '{{"ide_hook":"{event}","payload":'; cat; printf '}}'; }} > "$f" && mv "$f" "$f.json"; exit 0"#
+        r#"[ -n "$IDE_AGENT_EVENTS" ] && mkdir -p "$IDE_AGENT_EVENTS" && f=$(mktemp "$IDE_AGENT_EVENTS/e.XXXXXX") && {{ printf '{{"ide_hook":"{event}","payload":'; cat; printf '}}'; }} > "$f" && mv "$f" "$f.json"; exit 0"#
     )
 }
 
@@ -54,8 +54,11 @@ fn claude_style(events: &[(&str, Option<&str>)], tagged: bool) -> Value {
 fn settings_json() -> Value {
     let hook = json!([{ "hooks": [{ "type": "command", "command": HOOK_CMD }] }]);
     let agent_tool = json!([{ "matcher": "Agent|Task", "hooks": [{ "type": "command", "command": HOOK_CMD }] }]);
+    // PreToolUse on every tool: a call from inside a subagent (agent_id set) proves it's still alive —
+    // Claude fires SubagentStop at each turn end, and a background agent resumes after it when a message
+    // was queued for it (no second SubagentStart).
     json!({ "hooks": {
-        "PreToolUse": agent_tool, "PostToolUse": agent_tool,
+        "PreToolUse": hook, "PostToolUse": agent_tool,
         "SubagentStart": hook, "SubagentStop": hook,
         "UserPromptSubmit": hook, "Stop": hook, "Notification": hook,
     }})
@@ -113,17 +116,38 @@ pub fn init_notifications(app: &AppHandle) {
 
 #[cfg(target_os = "macos")]
 static WAITERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// Last banner (title, body) per terminal key, so the next one can take it down.
+#[cfg(target_os = "macos")]
+static LAST: std::sync::Mutex<BTreeMap<String, (String, String)>> = std::sync::Mutex::new(BTreeMap::new());
+
+/// Removes a delivered banner from Notification Center by its text. The crate ends a `wait_for_click`
+/// once its banner is gone, so this also frees that parked waiter.
+#[cfg(target_os = "macos")]
+#[allow(deprecated)]
+fn remove_banner(title: &str, body: &str) {
+    let center = objc2_foundation::NSUserNotificationCenter::defaultUserNotificationCenter();
+    for n in center.deliveredNotifications().iter() {
+        if n.title().is_some_and(|t| t.to_string() == title) && n.informativeText().is_some_and(|b| b.to_string() == body) {
+            center.removeDeliveredNotification(&n);
+        }
+    }
+}
 
 /// Banner for an agent terminal. A click focuses the window and emits `notification-clicked` with the key.
+/// A terminal's newer banner replaces its older one, so unclicked banners never pile up (or exhaust the waiters).
 #[tauri::command]
 pub async fn notify_agent(app: AppHandle, key: String, title: String, body: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         use mac_notification_sys::{Notification, NotificationResponse};
         use std::sync::atomic::Ordering;
-        // ponytail: a waiter parks a thread until its banner is clicked or cleared; past 8, fire and forget.
-        let wait = WAITERS.fetch_add(1, Ordering::SeqCst) < 8;
+        // ponytail: a waiter parks a thread until its banner is clicked or cleared; past 32, fire and forget.
+        let wait = WAITERS.fetch_add(1, Ordering::SeqCst) < 32;
+        let prev = LAST.lock().unwrap().insert(key.clone(), (title.clone(), body.clone()));
         let r = tauri::async_runtime::spawn_blocking(move || {
+            if let Some((t, b)) = prev {
+                remove_banner(&t, &b);
+            }
             let r = Notification::new().title(&title).message(&body).wait_for_click(wait).send();
             WAITERS.fetch_sub(1, Ordering::SeqCst);
             r
@@ -260,7 +284,8 @@ mod tests {
         for k in ["PreToolUse", "PostToolUse", "SubagentStart", "SubagentStop", "UserPromptSubmit", "Stop", "Notification"] {
             assert!(s["hooks"][k][0]["hooks"][0]["command"].is_string(), "{k}");
         }
-        assert_eq!(s["hooks"]["PreToolUse"][0]["matcher"], "Agent|Task");
+        assert!(s["hooks"]["PreToolUse"][0].get("matcher").is_none(), "every tool call: subagent liveness");
+        assert_eq!(s["hooks"]["PostToolUse"][0]["matcher"], "Agent|Task");
     }
 }
 

@@ -1,6 +1,7 @@
 import { Group, Panel, Separator, useDefaultLayout, usePanelRef } from "react-resizable-panels";
 import { useEffect, type CSSProperties } from "react";
 import { isFailed, panelApi, scriptsWindow, selectActiveSpace, togglePanel, useStore } from "./store";
+import { dismissUpdate, installUpdate, restartForUpdate } from "./lib/updates";
 import type { Project } from "./ipc";
 import { Icon, IconButton, ProjectIcon } from "./components/ui";
 import { LeftPanel, SpaceGit } from "./components/LeftPanel";
@@ -21,6 +22,58 @@ function TitleBar() {
         <IconButton icon="settings" title="Settings (⌘,)" onClick={() => useStore.setState({ dialog: { kind: "settings" } })} />
       </div>
     </header>
+  );
+}
+
+/** Bottom-right update card (lib/updates): available → downloading → installed → restart. */
+function UpdateCard() {
+  const u = useStore((s) => s.update);
+  if (!u || u.hidden) return null;
+  const v = u.version ? `Aira ${u.version}` : "Aira";
+  const act = u.stage === "available" || u.stage === "installed";
+  return (
+    <div className="update-card" role="status">
+      <Icon name={u.stage === "error" ? "error" : u.stage === "upToDate" ? "check_circle" : "system_update_alt"} size={18} className={u.stage === "error" ? "red" : u.stage === "upToDate" ? "green" : undefined} />
+      <div className="update-body">
+        {u.stage === "available" && (
+          <>
+            <b>{v} is available</b>
+            <span className="dim">Everything keeps running while it downloads.</span>
+            {u.notes && <pre className="update-notes scroll">{u.notes}</pre>}
+          </>
+        )}
+        {u.stage === "downloading" && (
+          <>
+            <b>Downloading {v}…</b>
+            <progress value={u.progress ?? 0} max={1} />
+          </>
+        )}
+        {u.stage === "installed" && (
+          <>
+            <b>{v} is ready</b>
+            <span className="dim">Restart to finish. Your terminals and tabs come back as they are.</span>
+          </>
+        )}
+        {u.stage === "upToDate" && <b>You're on the latest version.</b>}
+        {u.stage === "error" && (
+          <>
+            <b>Update failed</b>
+            <span className="dim">{u.error}</span>
+          </>
+        )}
+        {act && (
+          <div className="update-actions">
+            <button className="btn primary small" onClick={u.stage === "available" ? installUpdate : restartForUpdate}>
+              {u.stage === "available" ? "Update" : "Restart now"}
+            </button>
+            <button className="btn small" onClick={dismissUpdate}>
+              Later
+            </button>
+          </div>
+        )}
+      </div>
+      {u.stage !== "downloading" && <IconButton icon="close" title="Dismiss" onClick={dismissUpdate} />}
+    </div>
   );
 }
 
@@ -127,6 +180,7 @@ export default function App() {
       {dialog?.kind === "space" && <SpaceDialog projectId={dialog.projectId} spaceId={dialog.spaceId} dir={dialog.dir} onClose={close} />}
       {dialog?.kind === "project" && <ProjectDialog projectId={dialog.projectId} onClose={close} />}
       {dialog?.kind === "newPath" && <NewPathDialog dir={dialog.dir} isDir={dialog.isDir} onClose={close} />}
+      <UpdateCard />
       {toast && (
         <div className="toast" role="alert" onClick={() => useStore.setState({ toast: null })}>
           <Icon name="error" size={16} /> <span>{toast}</span>

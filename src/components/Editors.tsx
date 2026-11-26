@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
-import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { openLink } from "../lib/menu";
 import { api, type Tab } from "../ipc";
 import {
   basename, dirname, isUnder, notify, openFile, pinTab, projectOf, refreshStatus, repoOf, scriptCwd, uid, useStore,
@@ -118,7 +119,7 @@ function EditorView({ path, tabId }: { path: string; tabId: string }) {
                   href={href}
                   onClick={(e) => {
                     e.preventDefault();
-                    if (href?.startsWith("http")) openUrl(href);
+                    if (href?.startsWith("http")) openLink(href);
                   }}
                 >
                   {children}

@@ -1328,6 +1328,68 @@ textarea {
 .toast .msi {
   color: var(--red);
 }
+.update-card ~ .toast {
+  bottom: 160px; /* above the update card */
+}
+
+/* ---------- update card (plan 015) ---------- */
+.update-card {
+  position: fixed;
+  right: 16px;
+  bottom: 38px;
+  z-index: 60;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  padding: 12px 10px 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--elev);
+  box-shadow: var(--shadow);
+  color: var(--text);
+}
+.update-card > .msi {
+  margin-top: 1px;
+  color: var(--accent);
+}
+.update-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.update-body b {
+  font-size: 13px;
+  font-weight: 600;
+}
+.update-notes {
+  margin: 4px 0 0;
+  max-height: 120px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg);
+  font: inherit;
+  white-space: pre-wrap;
+  color: var(--dim);
+}
+.update-body progress {
+  width: 100%;
+  height: 6px;
+  margin-top: 6px;
+  accent-color: var(--accent);
+}
+.update-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.update-pill {
+  color: var(--accent);
+}
 
 /* ---------- spaces (plan 002) ---------- */
 .small {
