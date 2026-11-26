@@ -47,4 +47,4 @@ Built as planned, with the hero reworked after the comp was approved:
 
 **Version on the site:** `site.js` asks the GitHub API for the latest release (CORS is open, 60 requests an hour per IP) and fills every `[data-latest]`. The static text behind it is stamped from the highest `v*` tag by `bun run site:version` (`scripts/site-version.mjs`); run it, after `git fetch --tags`, before publishing the site. The artifact preview can't reach the API, so it shows the stamped text.
 
-**Open:** `.impeccable/design.json` still describes the plan-010 site (run `/impeccable document`); `og.jpg` is regenerated from the new hero shot but its headline card still uses the old dark composition; real-device and Safari checks.
+**Open:** `.impeccable/design.json` still describes the plan-010 site (run `/impeccable document`); real-device and Safari checks.
