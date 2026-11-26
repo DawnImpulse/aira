@@ -505,7 +505,14 @@ setInterval(() => {
     if (!t.agent || t.status !== "running") continue;
     if (hooked.has(t.key)) {
       pollHooks(t.key); // exact status + subagents from Claude hooks
-      if (hookActive.has(t.key)) continue;
+      if (hookActive.has(t.key)) {
+        // No Stop hook comes when a turn dies on an API error ("Connection lost mid-response") or a crash, which
+        // pinned Working for good. The agent's spinner redraws constantly while it really works (even during a
+        // long tool call), so a long silence means the turn is over: hand status back to the heuristic.
+        const quiet = agentStatus[t.key]?.state === "working" && now - (lastOut.get(t.key) ?? now) > QUIET_MS;
+        if (!quiet) continue;
+        hookActive.delete(t.key);
+      }
     }
     const out = lastOut.get(t.key) ?? 0;
     const inp = lastIn.get(t.key);
@@ -617,6 +624,7 @@ function answered(key: string) {
   if (st?.state !== "waiting" || !hookActive.has(key)) return;
   useStore.setState((s) => ({ agentStatus: { ...s.agentStatus, [key]: { ...st, state: "working", since: Date.now() } } }));
 }
+const QUIET_MS = 20_000; // longest an agent that is working goes without redrawing its spinner, with margin
 
 /**
  * Ctrl+C / Esc may interrupt the agent's turn, and agents don't send their turn-end hook then (Claude
