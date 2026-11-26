@@ -3,7 +3,7 @@ import { ask } from "../lib/dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { api, type DirEntry, type Project, type Space } from "../ipc";
 import {
-  addSpace, basename, dirname, gitReposOf, joinPath, notify, onFsChange, openFile, selectActiveSpace, updateConfig, useStore,
+  addSpace, basename, dirname, joinPath, notify, onFsChange, openFile, selectActiveSpace, spaceReposOf, updateConfig, useStore,
 } from "../store";
 import { newTerminal } from "../lib/terminals";
 import { popupMenu, type MenuEntry } from "../lib/menu";
@@ -22,7 +22,7 @@ export function RightPanel() {
   const visited = useRef(new Set<string>()).current;
   if (space) visited.add(space.id);
   const changes = useStore((s) =>
-    project ? gitReposOf(project, s.repos[project.id]).reduce((n, r) => n + (s.status[r.path]?.files.length ?? 0), 0) : 0,
+    project && space ? spaceReposOf(project, space, s.repos[project.id]).reduce((n, r) => n + (s.status[r.path]?.files.length ?? 0), 0) : 0,
   );
   const setView = (v: "files" | "git") => updateConfig((c) => void (c.layout.rightView = v));
   return (

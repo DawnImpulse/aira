@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ask } from "../lib/dialog";
 import { api, type Branches, type FileEntry, type Project, type Repo, type Space } from "../ipc";
 import {
-  addSpace, basename, discover, dirname, excludesFor, gitReposOf, isUnder, notify, openDiff, openFile, refreshStatus,
-  setActiveSpace, updateConfig, useStore,
+  addSpace, basename, discover, dirname, excludesFor, isUnder, notify, openDiff, openFile, refreshStatus,
+  setActiveSpace, spaceReposOf, updateConfig, useStore,
 } from "../store";
 import { newTerminal } from "../lib/terminals";
 import { fileIconUrl } from "../lib/icons";
@@ -35,10 +35,7 @@ export function GitPanel({ project, space }: { project: Project; space: Space })
   const [busy, setBusy] = useState<string | null>(null);
   const [focused, setFocused] = useState<{ repo: string; file: FileEntry } | null>(null);
 
-  const repos = useMemo(
-    () => gitReposOf(project, all).sort((a, b) => Number(b.path === project.path) - Number(a.path === project.path) || a.path.localeCompare(b.path)),
-    [project, all],
-  );
+  const repos = useMemo(() => spaceReposOf(project, space, all), [project, space, all]);
   const colorOf = (r: Repo) => (r.path === project.path ? (project.color ?? PALETTE[0]) : PALETTE[repos.indexOf(r) % PALETTE.length]);
   const labelOf = (r: Repo) =>
     project.spaces.find((s) => s.dir === r.path)?.name ??
@@ -71,7 +68,7 @@ export function GitPanel({ project, space }: { project: Project; space: Space })
     return (
       <div className="empty-hint">
         <p>Not a git repository.</p>
-        <button className="btn" onClick={() => api.init(project.path).then(() => discover(project.id)).catch(notify)}>
+        <button className="btn" onClick={() => api.init(space.dir).then(() => discover(project.id)).catch(notify)}>
           <Icon name="add" /> Initialize repository
         </button>
       </div>
