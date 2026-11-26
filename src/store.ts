@@ -129,8 +129,8 @@ export const useStore = create<State>(() => ({
   restore: [],
   ports: [],
   toast: null,
-  overlays: 0,
   update: null,
+  overlays: 0,
   popped: {},
 }));
 
@@ -1001,6 +1001,7 @@ function onMenu(id: string) {
   const { config } = get();
   if (id === "settings") set({ dialog: { kind: "settings" } });
   else if (id === "check-updates") checkForUpdates(true);
+  else if (id === "restart") restartApp();
   else if (id === "open-folder") openFolders();
   else if (id === "new-terminal") {
     const p = activeProject();
@@ -1025,6 +1026,7 @@ export async function boot() {
   const restore = config.layout.runningAtQuit.filter((id) => config.scripts[id]);
   config.layout.runningAtQuit = [];
   set({ config, terms, restore, ready: true });
+  attachInherited(handoff);
   applySettings();
   media.addEventListener("change", applySettings);
   scheduleUpdateChecks();
@@ -1042,7 +1044,6 @@ export async function boot() {
       if (n !== badge) {
         badge = n;
         getCurrentWindow().setBadgeCount(n || undefined).catch(() => {});
-  else if (id === "restart") restartApp();
       }
     }
   });
@@ -1062,4 +1063,3 @@ export async function boot() {
   listen<string>("browser:docked", (e) => set((s) => ({ popped: omit(s.popped, e.payload) })));
 }
 
-  attachInherited(handoff);

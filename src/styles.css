@@ -1328,35 +1328,6 @@ textarea {
 .toast .msi {
   color: var(--red);
 }
-
-/* ---------- spaces (plan 002) ---------- */
-.small {
-  font-size: 11px;
-}
-.spaces-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 4px 8px 8px;
-}
-/* Compact: flat until selected; only the selected space gets background + border (+ beam). */
-.space-card {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 5px 8px 6px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  cursor: pointer;
-}
-.space-card:hover {
-  background: var(--hover);
-}
-.space-card.selected {
-  background: var(--elev);
-  border-color: var(--border-strong);
-}
-.space-card .card-title {
 .update-card ~ .toast {
   bottom: 160px; /* above the update card */
 }
@@ -1419,6 +1390,35 @@ textarea {
 .update-pill {
   color: var(--accent);
 }
+
+/* ---------- spaces (plan 002) ---------- */
+.small {
+  font-size: 11px;
+}
+.spaces-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px 8px;
+}
+/* Compact: flat until selected; only the selected space gets background + border (+ beam). */
+.space-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 8px 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.space-card:hover {
+  background: var(--hover);
+}
+.space-card.selected {
+  background: var(--elev);
+  border-color: var(--border-strong);
+}
+.space-card .card-title {
   font-size: 13px;
 }
 .space-card .card-sub {

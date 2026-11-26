@@ -36,14 +36,6 @@ interface XT {
   el: HTMLDivElement;
   opened: boolean;
   webgl: WebglAddon | null;
-}
-
-const xts = new Map<string, XT>();
-let theme = DARK;
-let lastSize = { cols: 120, rows: 32 };
-const fontFamily = (s: Settings) => `"${s.monoFont}", "SF Mono", Menlo, monospace`;
-
-export function setTerminalTheme(dark: boolean, s: Settings) {
   /** kitty keyboard protocol flag stack (top = active); [0] = legacy encoding. */
   kitty: number[];
 }
@@ -67,6 +59,17 @@ function kittyEncode(e: KeyboardEvent): string | null {
   }
   if (e.metaKey || (!e.ctrlKey && !e.altKey) || e.key.length !== 1) return null; // Cmd shortcuts, plain text, other keys
   return `\x1b[${e.key.toLowerCase().codePointAt(0)};${mods}u`;
+}
+
+/** Ctrl+C / Esc, in legacy or CSI u form. */
+const isInterrupt = (d: string) => d === "\x03" || d === "\x1b" || /^\x1b\[(27|99;5)(;\d+)?u$/.test(d);
+
+const xts = new Map<string, XT>();
+let theme = DARK;
+let lastSize = { cols: 120, rows: 32 };
+const fontFamily = (s: Settings) => `"${s.monoFont}", "SF Mono", Menlo, monospace`;
+
+export function setTerminalTheme(dark: boolean, s: Settings) {
   theme = dark ? DARK : LIGHT;
   for (const x of xts.values()) {
     x.term.options.theme = theme;
@@ -92,9 +95,7 @@ function xterm(key: string): XT {
     cursorBlink: true,
     macOptionIsMeta: true,
     allowProposedApi: true,
-/** Ctrl+C / Esc, in legacy or CSI u form. */
-const isInterrupt = (d: string) => d === "\x03" || d === "\x1b" || /^\x1b\[(27|99;5)(;\d+)?u$/.test(d);
-
+    linkHandler: { activate: (_e, uri) => void openLink(uri) }, // OSC 8 hyperlinks; WebLinksAddon covers plain-text URLs
   });
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
@@ -129,7 +130,15 @@ const isInterrupt = (d: string) => d === "\x03" || d === "\x1b" || /^\x1b\[(27|9
       term.clear();
       return false;
     }
-    linkHandler: { activate: (_e, uri) => void openLink(uri) }, // OSC 8 hyperlinks; WebLinksAddon covers plain-text URLs
+    if (top() & 1) {
+      const enc = kittyEncode(e);
+      if (enc) {
+        lastIn.set(key, Date.now());
+        if (isInterrupt(enc)) interrupted(key);
+        send(enc);
+        return false;
+      }
+    }
     // Shift+Enter in an agent terminal = new line, not submit. ESC CR (Option+Enter) is what Claude Code's own
     // /terminal-setup binds in VS Code and Alacritty (a bare LF counts as Enter there); Gemini CLI reads backslash + Enter.
     const agent = get().terms[key]?.agent;
@@ -188,15 +197,6 @@ const isInterrupt = (d: string) => d === "\x03" || d === "\x1b" || /^\x1b\[(27|9
         if (paths.length) pasteFiles(key, term, paths);
         else if (get().terms[key]?.agent) term.input("\x16");
       });
-    if (top() & 1) {
-      const enc = kittyEncode(e);
-      if (enc) {
-        lastIn.set(key, Date.now());
-        if (isInterrupt(enc)) interrupted(key);
-        send(enc);
-        return false;
-      }
-    }
     },
     true,
   );
@@ -289,6 +289,7 @@ export async function startSession(key: string) {
   const t = get().terms[key];
   if (!t || t.status === "running" || t.status === "stopping") return;
   const x = xterm(key);
+  x.kitty.splice(0, x.kitty.length, 0); // a new program starts in legacy encoding
   if (t.sessionId) x.term.write("\r\n\x1b[2m── restarted ──\x1b[0m\r\n");
   const sessionId = uid();
   const now = Date.now();
@@ -298,6 +299,17 @@ export async function startSession(key: string) {
     updateConfig((c) => {
       if (c.scripts[scriptId]) c.scripts[scriptId].lastRunAt = now;
     });
+  try {
+    const { command, env } = await withAgentHooks(t);
+    await api.ptySpawn({ id: sessionId, cwd: t.cwd, command, cols: x.term.cols, rows: x.term.rows, env, onData: channelFor(key, sessionId, x) });
+  } catch (e) {
+    x.term.write(`\r\n\x1b[31mFailed to start: ${e}\x1b[0m\r\n`);
+    setTerm(key, { status: "exited", exitCode: -1, endedAt: Date.now() });
+  }
+}
+
+/** Output of `sessionId` into the terminal, acked in chunks for the Rust side's flow control; the exit message ends it. */
+function channelFor(key: string, sessionId: string, x: XT) {
   let unacked = 0;
   return new Channel<PtyMessage>((msg) => {
     if (msg instanceof ArrayBuffer) {
@@ -312,6 +324,38 @@ export async function startSession(key: string) {
       });
     } else onExit(key, sessionId, msg.exit);
   });
+}
+
+// ---------- relaunch handoff (plan 015) ----------
+
+type Handoff = { sessionId: string; startedAt?: number; scrollback: string; hooked: boolean; kitty?: number[] };
+const handoffPath = async () => join(await appConfigDir(), "handoff.json");
+let inheritedIds = new Set<string>();
+
+/** Before a relaunch: which session each live terminal runs and what is on its screen, for `attachInherited`. */
+export async function writeHandoff() {
+  const out: Record<string, Handoff> = {};
+  for (const t of Object.values(get().terms)) {
+    if (!live(t)) continue;
+    const x = xts.get(t.key);
+    let scrollback = "";
+    if (x) {
+      const s = new SerializeAddon();
+      x.term.loadAddon(s);
+      scrollback = s.serialize({ scrollback: 2000 });
+      s.dispose();
+    }
+    out[t.key] = { sessionId: t.sessionId!, startedAt: t.startedAt, scrollback, hooked: hooked.has(t.key), kitty: x?.kitty };
+  }
+  await api.writeFile(await handoffPath(), JSON.stringify(out));
+}
+
+/** At boot: what the previous process saved about the sessions it handed over, keyed by terminal; only
+ * sessions the Rust side actually holds count, so a stale file is inert. */
+export async function readHandoff(): Promise<Record<string, Handoff>> {
+  inheritedIds = new Set(await api.ptyInherited().catch(() => [] as string[]));
+  if (!inheritedIds.size) return {};
+  let saved: Record<string, Handoff> = {};
   try {
     saved = JSON.parse(await api.readFile(await handoffPath()));
   } catch {
@@ -353,12 +397,12 @@ function onExit(key: string, sessionId: string, code: number) {
   if (!t.scriptId && !t.command && !sleeping.delete(key)) return removeTerm(key, true);
   if (t.agent && t.status !== "stopping") notifyAgent(key, code === 0 ? "Exited" : `Exited with code ${code}`);
   const stopped = t.status === "stopping";
+  xts.get(key)?.kitty.splice(0, Infinity, 0);
   xts.get(key)?.term.write(`\r\n\x1b[2m[${stopped ? "stopped" : `process exited with code ${code}`}]\x1b[0m\r\n`);
   setTerm(key, { status: "exited", exitCode: code, endedAt: Date.now(), stopped });
 }
 
 export function stop(key: string) {
-  x.kitty.splice(0, x.kitty.length, 0); // a new program starts in legacy encoding
   const t = get().terms[key];
   if (!t?.sessionId || t.status !== "running") return;
   setTerm(key, { status: "stopping" });
@@ -369,17 +413,6 @@ export function stop(key: string) {
 export async function restart(key: string, projectId?: string) {
   const t = get().terms[key];
   if (t?.sessionId && (t.status === "running" || t.status === "stopping")) {
-  try {
-    const { command, env } = await withAgentHooks(t);
-    await api.ptySpawn({ id: sessionId, cwd: t.cwd, command, cols: x.term.cols, rows: x.term.rows, env, onData: channelFor(key, sessionId, x) });
-  } catch (e) {
-    x.term.write(`\r\n\x1b[31mFailed to start: ${e}\x1b[0m\r\n`);
-    setTerm(key, { status: "exited", exitCode: -1, endedAt: Date.now() });
-  }
-}
-
-/** Output of `sessionId` into the terminal, acked in chunks for the Rust side's flow control; the exit message ends it. */
-function channelFor(key: string, sessionId: string, x: XT) {
     const exited = new Promise<void>((resolve) => {
       exitWaiters.set(t.sessionId!, resolve);
       setTimeout(resolve, 6000); // never hang the button on a lost exit message
@@ -405,38 +438,6 @@ export function sleepTerm(key: string) {
 /** Terminals among `keys` that are running something: a script/command/agent, or a shell with a foreground job. */
 export async function busyTerms(keys: string[]): Promise<Term[]> {
   const running = keys.map((k) => get().terms[k]).filter(live);
-}
-
-// ---------- relaunch handoff (plan 015) ----------
-
-type Handoff = { sessionId: string; startedAt?: number; scrollback: string; hooked: boolean; kitty?: number[] };
-const handoffPath = async () => join(await appConfigDir(), "handoff.json");
-let inheritedIds = new Set<string>();
-
-/** Before a relaunch: which session each live terminal runs and what is on its screen, for `attachInherited`. */
-export async function writeHandoff() {
-  const out: Record<string, Handoff> = {};
-  for (const t of Object.values(get().terms)) {
-    if (!live(t)) continue;
-    const x = xts.get(t.key);
-    let scrollback = "";
-    if (x) {
-      const s = new SerializeAddon();
-      x.term.loadAddon(s);
-      scrollback = s.serialize({ scrollback: 2000 });
-      s.dispose();
-    }
-    out[t.key] = { sessionId: t.sessionId!, startedAt: t.startedAt, scrollback, hooked: hooked.has(t.key), kitty: x?.kitty };
-  }
-  await api.writeFile(await handoffPath(), JSON.stringify(out));
-}
-
-/** At boot: what the previous process saved about the sessions it handed over, keyed by terminal; only
- * sessions the Rust side actually holds count, so a stale file is inert. */
-export async function readHandoff(): Promise<Record<string, Handoff>> {
-  inheritedIds = new Set(await api.ptyInherited().catch(() => [] as string[]));
-  if (!inheritedIds.size) return {};
-  let saved: Record<string, Handoff> = {};
   const shells = running.filter((t) => !t.scriptId && !t.command).map((t) => t.sessionId!);
   const busy = new Set(await api.ptyBusy(shells).catch(() => shells)); // unknown counts as busy
   return running.filter((t) => t.scriptId || t.command || busy.has(t.sessionId!));
@@ -533,7 +534,6 @@ export function showScript(scriptId: string, projectId: string) {
   ensureScriptTerm(scriptId, projectId);
   openTerminalTab(scriptId, true, scriptsWindow(projectId));
 }
-  xts.get(key)?.kitty.splice(0, Infinity, 0);
 
 /** What the project's Start button launches: its ticked scripts (still linked), or every script when none is ticked. */
 const startSet = (p: Project) => {
@@ -555,6 +555,7 @@ export function stopAllScripts(projectId: string) {
 
 const lastOut = new Map<string, number>();
 const lastIn = new Map<string, number>();
+const QUIET_MS = 20_000; // longest an agent that is working goes without redrawing its spinner, with margin
 
 // ponytail: activity heuristic. Agent TUIs animate a spinner while working and sit still while
 // waiting for you. Output right after input (typing echo, resize redraw) doesn't count, and
@@ -692,7 +693,6 @@ function answered(key: string) {
   if (st?.state !== "waiting" || !hookActive.has(key)) return;
   useStore.setState((s) => ({ agentStatus: { ...s.agentStatus, [key]: { ...st, state: "working", since: Date.now() } } }));
 }
-const QUIET_MS = 20_000; // longest an agent that is working goes without redrawing its spinner, with margin
 
 /**
  * Ctrl+C / Esc may interrupt the agent's turn, and agents don't send their turn-end hook then (Claude

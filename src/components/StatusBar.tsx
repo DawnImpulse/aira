@@ -44,14 +44,13 @@ export function StatusBar() {
         )}
       </div>
       <div className="status-right">
-        <span title={`App ${formatBytes(mem.app)} + terminals ${formatBytes(termMem)} (resident memory)`}>
-          <Icon name="memory" size={13} /> {formatBytes(mem.app + termMem)}
         {updatePill && (
           <button className="status-btn update-pill" onClick={() => useStore.setState({ update: { ...update, hidden: false } })} title="Show the update">
             <Icon name="system_update_alt" size={13} /> {update.stage === "installed" ? "Restart to update" : `Update ${update.version}`}
           </button>
         )}
-        <ClaudeUsageItem />
+        <span title={`App ${formatBytes(mem.app)} + terminals ${formatBytes(termMem)} (resident memory)`}>
+          <Icon name="memory" size={13} /> {formatBytes(mem.app + termMem)}
         </span>
         <div className="popover-anchor">
           <button className={cx("status-btn", portsOpen && "on")} onClick={() => setPortsOpen(!portsOpen)} title="Ports used by your projects: find and free them">
