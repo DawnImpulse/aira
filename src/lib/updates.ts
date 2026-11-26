@@ -1,11 +1,23 @@
-import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
-import { ask, message } from "@tauri-apps/plugin-dialog";
-import { notify } from "../store";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { notify, restartApp, useStore } from "../store";
+
+/** The bottom-right update card. `hidden`: dismissed with "Later"; the status-bar pill brings it back. */
+export type UpdateState = {
+  version: string;
+  stage: "available" | "downloading" | "installed" | "upToDate" | "error";
+  notes?: string;
+  progress?: number; // 0..1 while downloading
+  error?: string;
+  hidden?: boolean;
+};
 
 let checking = false;
+let pending: Update | null = null; // found, not installed yet
+let installed: string | undefined; // already swapped into the bundle this session; runs on the next launch
 const EVERY = 12 * 60 * 60 * 1000;
 const LAST = "updates:lastCheck";
+const setUpdate = (update: UpdateState | null) => useStore.setState({ update });
+const patch = (p: Partial<UpdateState>) => useStore.setState((s) => (s.update ? { update: { ...s.update, ...p } } : {}));
 
 /** Automatic checks: at most one per 12 hours, counted across launches; a manual check doesn't reset the clock. */
 export function scheduleUpdateChecks() {
@@ -20,8 +32,8 @@ export function scheduleUpdateChecks() {
 }
 
 /**
- * Looks for a newer release (release.yml publishes latest.json next to each DMG) and offers to install
- * it. A manual check also reports "up to date" and failures; the automatic one at launch stays quiet.
+ * Looks for a newer release (release.yml publishes latest.json next to each DMG) and shows the card.
+ * A manual check also reports "up to date" and failures; the automatic one stays quiet about those.
  */
 export async function checkForUpdates(manual = false) {
   if (checking) return;
@@ -31,23 +43,58 @@ export async function checkForUpdates(manual = false) {
   }
   checking = true;
   try {
-    const u = await check();
-    if (!u) {
-      if (manual) await message("You're on the latest version.", { title: "Aira is up to date" });
+    // The running process still reports the old version, so `check()` would offer the same update again.
+    if (installed) {
+      if (manual) patch({ hidden: false });
       return;
     }
-    const notes = u.body?.trim();
-    const ok = await ask(`Aira ${u.version} is available (you have ${u.currentVersion}).${notes ? `\n\n${notes}` : ""}\n\nDownload and install it now? Aira restarts when it's done; running terminals stop.`, {
-      title: "Update available",
-      okLabel: "Update",
-      cancelLabel: "Later",
-    });
-    if (!ok) return;
-    await u.downloadAndInstall();
-    await relaunch();
+    const u = await check();
+    if (!u) {
+      if (manual) {
+        setUpdate({ version: "", stage: "upToDate" });
+        setTimeout(() => useStore.getState().update?.stage === "upToDate" && setUpdate(null), 4000);
+      }
+      return;
+    }
+    pending = u;
+    setUpdate({ version: u.version, stage: "available", notes: u.body?.trim() });
   } catch (e) {
-    if (manual) notify(`Update check failed: ${e}`);
+    if (manual) setUpdate({ version: "", stage: "error", error: String(e) });
   } finally {
     checking = false;
   }
+}
+
+/** "Update" on the card: downloads and swaps the bundle on disk. The running app is left alone until "Restart now". */
+export async function installUpdate() {
+  const u = pending;
+  if (!u) return;
+  pending = null;
+  let total = 0;
+  let got = 0;
+  setUpdate({ version: u.version, stage: "downloading", progress: 0 });
+  try {
+    await u.downloadAndInstall((e) => {
+      if (e.event === "Started") total = e.data.contentLength ?? 0;
+      else if (e.event === "Progress") {
+        got += e.data.chunkLength;
+        if (total) patch({ progress: got / total });
+      }
+    });
+    installed = u.version;
+    setUpdate({ version: u.version, stage: "installed" });
+  } catch (e) {
+    setUpdate({ version: u.version, stage: "error", error: String(e) });
+  }
+}
+
+/** "Restart now": the relaunch hands every terminal to the new version (plan 015). */
+export const restartForUpdate = () => restartApp();
+
+/** "Later" / close: an update that is available or installed stays reachable from the status bar. */
+export function dismissUpdate() {
+  const s = useStore.getState().update;
+  if (!s) return;
+  if (s.stage === "available" || s.stage === "installed") patch({ hidden: true });
+  else setUpdate(null);
 }

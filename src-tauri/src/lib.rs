@@ -24,6 +24,8 @@ fn menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                 &[
                     &PredefinedMenuItem::about(app, None, None)?,
                     &MenuItem::with_id(app, "check-updates", "Check for Updates…", true, None::<&str>)?,
+                    // Relaunches and reattaches every terminal (the same path an update takes).
+                    &MenuItem::with_id(app, "restart", "Restart Aira", true, None::<&str>)?,
                     &sep()?,
                     &item("settings", "Settings…", "CmdOrCtrl+,")?,
                     &sep()?,
@@ -92,6 +94,7 @@ async fn quit_app(app: AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let handed = pty::take_inherit(); // before anything snapshots the environment for children
     std::thread::spawn(|| {
         env::get(); // warm up: resolving the login-shell env takes ~0.2–2s
     });
@@ -100,6 +103,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        // Main window size/position across launches. Pop-outs have per-page labels and are not saved.
+        .plugin(tauri_plugin_window_state::Builder::new().with_filter(|label| label == "main").build())
         .manage(pty::Ptys::default())
         .manage(fs::Watch::default())
         .manage(browser::Browsers::default())
@@ -133,7 +138,9 @@ pub fn run() {
                 })
                 .build()?;
             mem::start(app.handle().clone());
-            agent::clear_all(app.handle());
+            if pty::adopt(app.handle(), handed) == 0 {
+                agent::clear_all(app.handle()); // leftovers from a run that ended; after a handoff the hooks are still writing
+            }
             agent::init_notifications(app.handle());
             Ok(())
         })
@@ -145,6 +152,9 @@ pub fn run() {
             pty::pty_ack,
             pty::pty_kill,
             pty::pty_busy,
+            pty::pty_inherited,
+            pty::pty_attach,
+            pty::relaunch,
             ports::ports_list,
             ports::kill_pid,
             fs::read_dir,
@@ -179,6 +189,7 @@ pub fn run() {
             ai::ai_set_key,
             ai::ai_commit_message,
             ai::ai_list_models,
+            ai::claude_usage,
             agent::agent_events,
             agent::agent_events_clear,
             agent::agent_usage,

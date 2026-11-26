@@ -2,6 +2,8 @@ import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { SerializeAddon } from "@xterm/addon-serialize";
+import { appConfigDir, join } from "@tauri-apps/api/path";
 import { Channel } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import "@xterm/xterm/css/xterm.css";
@@ -297,7 +299,7 @@ export async function startSession(key: string) {
       if (c.scripts[scriptId]) c.scripts[scriptId].lastRunAt = now;
     });
   let unacked = 0;
-  const channel = new Channel<PtyMessage>((msg) => {
+  return new Channel<PtyMessage>((msg) => {
     if (msg instanceof ArrayBuffer) {
       lastOut.set(key, Date.now());
       const bytes = new Uint8Array(msg);
@@ -311,10 +313,33 @@ export async function startSession(key: string) {
     } else onExit(key, sessionId, msg.exit);
   });
   try {
-    const { command, env } = await withAgentHooks(t);
-    await api.ptySpawn({ id: sessionId, cwd: t.cwd, command, cols: x.term.cols, rows: x.term.rows, env, onData: channel });
+    saved = JSON.parse(await api.readFile(await handoffPath()));
+  } catch {
+    /* no file: nothing to reattach */
+  }
+  return Object.fromEntries(Object.entries(saved).filter(([, h]) => inheritedIds.has(h.sessionId)));
+}
+
+/** Reattaches the terminals `boot` marked running from the handoff. A session no tab claims is ended. */
+export function attachInherited(handoff: Record<string, Handoff>) {
+  const claimed = new Set<string>();
+  for (const [key, h] of Object.entries(handoff)) {
+    if (get().terms[key]?.sessionId !== h.sessionId) continue;
+    claimed.add(h.sessionId);
+    void attachSession(key, h);
+  }
+  for (const id of inheritedIds) if (!claimed.has(id)) api.ptyKill(id).catch(() => {}); // its tab was closed before the relaunch
+}
+
+async function attachSession(key: string, h: Handoff) {
+  const x = xterm(key);
+  if (h.scrollback) x.term.write(h.scrollback);
+  if (h.kitty?.length) x.kitty.splice(0, Infinity, ...h.kitty); // the program keeps expecting CSI u keys
+  if (h.hooked) hooked.add(key); // keep reading the agent's hook events
+  try {
+    await api.ptyAttach({ id: h.sessionId, cols: x.term.cols, rows: x.term.rows, onData: channelFor(key, h.sessionId, x) });
   } catch (e) {
-    x.term.write(`\r\n\x1b[31mFailed to start: ${e}\x1b[0m\r\n`);
+    x.term.write(`\r\n\x1b[31mCould not reattach: ${e}\x1b[0m\r\n`);
     setTerm(key, { status: "exited", exitCode: -1, endedAt: Date.now() });
   }
 }
@@ -333,6 +358,7 @@ function onExit(key: string, sessionId: string, code: number) {
 }
 
 export function stop(key: string) {
+  x.kitty.splice(0, x.kitty.length, 0); // a new program starts in legacy encoding
   const t = get().terms[key];
   if (!t?.sessionId || t.status !== "running") return;
   setTerm(key, { status: "stopping" });
@@ -343,6 +369,17 @@ export function stop(key: string) {
 export async function restart(key: string, projectId?: string) {
   const t = get().terms[key];
   if (t?.sessionId && (t.status === "running" || t.status === "stopping")) {
+  try {
+    const { command, env } = await withAgentHooks(t);
+    await api.ptySpawn({ id: sessionId, cwd: t.cwd, command, cols: x.term.cols, rows: x.term.rows, env, onData: channelFor(key, sessionId, x) });
+  } catch (e) {
+    x.term.write(`\r\n\x1b[31mFailed to start: ${e}\x1b[0m\r\n`);
+    setTerm(key, { status: "exited", exitCode: -1, endedAt: Date.now() });
+  }
+}
+
+/** Output of `sessionId` into the terminal, acked in chunks for the Rust side's flow control; the exit message ends it. */
+function channelFor(key: string, sessionId: string, x: XT) {
     const exited = new Promise<void>((resolve) => {
       exitWaiters.set(t.sessionId!, resolve);
       setTimeout(resolve, 6000); // never hang the button on a lost exit message
@@ -356,7 +393,6 @@ export async function restart(key: string, projectId?: string) {
 }
 
 const live = (t?: Term): t is Term => !!t?.sessionId && (t.status === "running" || t.status === "stopping");
-  x.kitty.splice(0, x.kitty.length, 0); // a new program starts in legacy encoding
 
 const sleeping = new Set<string>(); // shells stopped by a space going to sleep keep their tab
 /** Stops a terminal for a sleeping space; its tab stays so waking can start it again. */
@@ -369,6 +405,38 @@ export function sleepTerm(key: string) {
 /** Terminals among `keys` that are running something: a script/command/agent, or a shell with a foreground job. */
 export async function busyTerms(keys: string[]): Promise<Term[]> {
   const running = keys.map((k) => get().terms[k]).filter(live);
+}
+
+// ---------- relaunch handoff (plan 015) ----------
+
+type Handoff = { sessionId: string; startedAt?: number; scrollback: string; hooked: boolean; kitty?: number[] };
+const handoffPath = async () => join(await appConfigDir(), "handoff.json");
+let inheritedIds = new Set<string>();
+
+/** Before a relaunch: which session each live terminal runs and what is on its screen, for `attachInherited`. */
+export async function writeHandoff() {
+  const out: Record<string, Handoff> = {};
+  for (const t of Object.values(get().terms)) {
+    if (!live(t)) continue;
+    const x = xts.get(t.key);
+    let scrollback = "";
+    if (x) {
+      const s = new SerializeAddon();
+      x.term.loadAddon(s);
+      scrollback = s.serialize({ scrollback: 2000 });
+      s.dispose();
+    }
+    out[t.key] = { sessionId: t.sessionId!, startedAt: t.startedAt, scrollback, hooked: hooked.has(t.key), kitty: x?.kitty };
+  }
+  await api.writeFile(await handoffPath(), JSON.stringify(out));
+}
+
+/** At boot: what the previous process saved about the sessions it handed over, keyed by terminal; only
+ * sessions the Rust side actually holds count, so a stale file is inert. */
+export async function readHandoff(): Promise<Record<string, Handoff>> {
+  inheritedIds = new Set(await api.ptyInherited().catch(() => [] as string[]));
+  if (!inheritedIds.size) return {};
+  let saved: Record<string, Handoff> = {};
   const shells = running.filter((t) => !t.scriptId && !t.command).map((t) => t.sessionId!);
   const busy = new Set(await api.ptyBusy(shells).catch(() => shells)); // unknown counts as busy
   return running.filter((t) => t.scriptId || t.command || busy.has(t.sessionId!));
