@@ -42,6 +42,29 @@ let lastSize = { cols: 120, rows: 32 };
 const fontFamily = (s: Settings) => `"${s.monoFont}", "SF Mono", Menlo, monospace`;
 
 export function setTerminalTheme(dark: boolean, s: Settings) {
+  /** kitty keyboard protocol flag stack (top = active); [0] = legacy encoding. */
+  kitty: number[];
+}
+
+// ---------- kitty keyboard protocol ----------
+// xterm.js has none, so a TUI can't tell Ctrl+Enter or Shift+Enter from Enter and Claude Code falls back to its
+// ctrl+x ctrl+s chord. Answering the query (CSI ? u) and encoding keys as CSI u while flags are pushed gives it
+// ctrl+enter to send now, shift+enter for a newline and an unambiguous Esc, as in Orca or Ghostty.
+// https://sw.kovidgoyal.net/kitty/keyboard-protocol/
+const KITTY_SPECIAL: Record<string, number> = { Escape: 27, Enter: 13, Tab: 9, Backspace: 127 };
+
+/** CSI u encoding for a keydown under the "disambiguate" flag, or null when the legacy bytes are right. */
+function kittyEncode(e: KeyboardEvent): string | null {
+  // Cmd+Enter counts as Ctrl+Enter (Claude Code's "send now"): super+enter is bound nowhere, and Orca users expect it.
+  const ctrl = e.ctrlKey || (e.metaKey && e.key === "Enter");
+  const mods = 1 + (e.shiftKey ? 1 : 0) + (e.altKey ? 2 : 0) + (ctrl ? 4 : 0);
+  const special = KITTY_SPECIAL[e.key];
+  if (special) {
+    if (e.key !== "Escape" && mods === 1) return null; // plain Enter/Tab/Backspace stay legacy per spec
+    return `\x1b[${special}${mods > 1 ? `;${mods}` : ""}u`;
+  }
+  if (e.metaKey || (!e.ctrlKey && !e.altKey) || e.key.length !== 1) return null; // Cmd shortcuts, plain text, other keys
+  return `\x1b[${e.key.toLowerCase().codePointAt(0)};${mods}u`;
   theme = dark ? DARK : LIGHT;
   for (const x of xts.values()) {
     x.term.options.theme = theme;
@@ -67,10 +90,36 @@ function xterm(key: string): XT {
     cursorBlink: true,
     macOptionIsMeta: true,
     allowProposedApi: true,
+/** Ctrl+C / Esc, in legacy or CSI u form. */
+const isInterrupt = (d: string) => d === "\x03" || d === "\x1b" || /^\x1b\[(27|99;5)(;\d+)?u$/.test(d);
+
   });
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
   term.loadAddon(new WebLinksAddon((_e, uri) => void openLink(uri)));
+  const live = () => {
+    const t = get().terms[key];
+    return t?.sessionId && t.status === "running" ? t.sessionId : null;
+  };
+  const send = (d: string) => {
+    const id = live();
+    if (id) api.ptyWrite(id, d).catch(() => {});
+  };
+  const kitty = [0];
+  const num = (v: number | number[] | undefined) => (typeof v === "number" ? v : Array.isArray(v) ? (v[0] ?? 0) : 0);
+  const top = () => kitty[kitty.length - 1];
+  term.parser.registerCsiHandler({ prefix: "?", final: "u" }, () => (send(`\x1b[?${top()}u`), true));
+  term.parser.registerCsiHandler({ prefix: ">", final: "u" }, (p) => (kitty.push(num(p[0])), true));
+  term.parser.registerCsiHandler({ prefix: "<", final: "u" }, (p) => {
+    for (let n = num(p[0]) || 1; n > 0 && kitty.length > 1; n--) kitty.pop();
+    return true;
+  });
+  term.parser.registerCsiHandler({ prefix: "=", final: "u" }, (p) => {
+    const f = num(p[0]);
+    const mode = num(p[1]) || 1;
+    kitty[kitty.length - 1] = mode === 1 ? f : mode === 2 ? top() | f : top() & ~f;
+    return true;
+  });
   term.attachCustomKeyEventHandler((e) => {
     // WebKit also fires keypress for Shift+Enter; left to xterm, that sends a second CR after ours (= submit).
     if (e.type !== "keydown") return !(e.key === "Enter" && e.shiftKey);
@@ -78,6 +127,7 @@ function xterm(key: string): XT {
       term.clear();
       return false;
     }
+    linkHandler: { activate: (_e, uri) => void openLink(uri) }, // OSC 8 hyperlinks; WebLinksAddon covers plain-text URLs
     // Shift+Enter in an agent terminal = new line, not submit. ESC CR (Option+Enter) is what Claude Code's own
     // /terminal-setup binds in VS Code and Alacritty (a bare LF counts as Enter there); Gemini CLI reads backslash + Enter.
     const agent = get().terms[key]?.agent;
@@ -85,24 +135,22 @@ function xterm(key: string): XT {
       term.input(agent === "claude" ? "\x1b\r" : "\\\r");
       return false;
     }
-    // Ctrl+Enter: xterm.js sends a plain CR for it (no kitty keyboard protocol), so Claude Code would see Enter.
-    // Send the ctrl+x ctrl+s chord instead (its other default for chat:sendNow), as two writes so the input
-    // parser sees two keys, not one unknown sequence.
-    if (e.ctrlKey && e.key === "Enter" && agent === "claude") {
-      term.input("\x18");
-      setTimeout(() => term.input("\x13"), 10);
+    // Ctrl+Enter / Cmd+Enter before Claude Code has pushed its keyboard flags (it asks at startup; a session
+    // reattached after a restart answers nothing): a plain CR would read as Enter, so send its ctrl+x ctrl+s
+    // chord, as two ordered writes so the input parser sees two keys, not one unknown sequence.
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && agent === "claude") {
+      const id = live();
+      if (id) {
+        lastIn.set(key, Date.now());
+        api.ptyWrite(id, "\x18").then(() => api.ptyWrite(id, "\x13")).catch(() => {});
+      }
       return false;
     }
     return true;
   });
-  const live = () => {
-    const t = get().terms[key];
-    return t?.sessionId && t.status === "running" ? t.sessionId : null;
-  };
   term.onData((d) => {
     lastIn.set(key, Date.now());
-    if (d === "\x03" || d === "\x1b") interrupted(key); // Ctrl+C / Esc
-    linkHandler: { activate: (_e, uri) => void openLink(uri) }, // OSC 8 hyperlinks; WebLinksAddon covers plain-text URLs
+    if (isInterrupt(d)) interrupted(key); // Ctrl+C / Esc
     else answered(key); // typing at a "Needs input" prompt: the agent is working again until its next status hook
     const id = live();
     if (id) api.ptyWrite(id, d).catch(() => {});
@@ -138,10 +186,19 @@ function xterm(key: string): XT {
         if (paths.length) pasteFiles(key, term, paths);
         else if (get().terms[key]?.agent) term.input("\x16");
       });
+    if (top() & 1) {
+      const enc = kittyEncode(e);
+      if (enc) {
+        lastIn.set(key, Date.now());
+        if (isInterrupt(enc)) interrupted(key);
+        send(enc);
+        return false;
+      }
+    }
     },
     true,
   );
-  const x: XT = { term, fit: fitAddon, el, opened: false, webgl: null };
+  const x: XT = { term, fit: fitAddon, el, opened: false, webgl: null, kitty };
   xts.set(key, x);
   hookFileDrops();
   return x;
@@ -299,6 +356,7 @@ export async function restart(key: string, projectId?: string) {
 }
 
 const live = (t?: Term): t is Term => !!t?.sessionId && (t.status === "running" || t.status === "stopping");
+  x.kitty.splice(0, x.kitty.length, 0); // a new program starts in legacy encoding
 
 const sleeping = new Set<string>(); // shells stopped by a space going to sleep keep their tab
 /** Stops a terminal for a sleeping space; its tab stays so waking can start it again. */
@@ -407,6 +465,7 @@ export function showScript(scriptId: string, projectId: string) {
   ensureScriptTerm(scriptId, projectId);
   openTerminalTab(scriptId, true, scriptsWindow(projectId));
 }
+  xts.get(key)?.kitty.splice(0, Infinity, 0);
 
 /** What the project's Start button launches: its ticked scripts (still linked), or every script when none is ticked. */
 const startSet = (p: Project) => {
