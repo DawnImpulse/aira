@@ -12,6 +12,7 @@ export type AgentEvent =
   | { kind: "spawn"; caller: string | null; type?: string; description?: string } // a subagent is about to start
   | { kind: "sub_start"; id?: string; parent?: string | null; type?: string; description?: string }
   | { kind: "sub_stop"; id?: string; type?: string }
+  | { kind: "sub_active"; id: string; type?: string } // a subagent did something after its sub_stop (Claude background agents resume on a queued message)
   | { kind: "link"; parent: string | null; child: string; done?: boolean };
 
 type Raw = HookEvent & Record<string, unknown>;
@@ -25,7 +26,8 @@ const claude: Normalizer = (e) => {
   const caller = e.agent_id ?? null; // set when the event comes from inside a subagent
   switch (e.hook_event_name) {
     case "PreToolUse":
-      return [{ kind: "spawn", caller, type: str(input(e).subagent_type), description: str(input(e).description) }];
+      if (e.tool_name === "Agent" || e.tool_name === "Task") return [{ kind: "spawn", caller, type: str(input(e).subagent_type), description: str(input(e).description) }];
+      return caller ? [{ kind: "sub_active", id: caller, type: e.agent_type }] : [];
     case "SubagentStart":
       return e.agent_id ? [{ kind: "sub_start", id: e.agent_id, type: e.agent_type }] : [];
     case "PostToolUse": {
@@ -137,12 +139,20 @@ export function fold(h: TreeState, events: AgentEvent[], now = Date.now()): Agen
         break;
       }
       case "sub_stop": {
-        // By id; else the oldest running node of that type (agents without subagent ids).
-        const n = (e.id && h.nodes.get(e.id)) || [...h.nodes.values()].find((x) => x.running && (!e.type || x.type === e.type));
+        // By id; agents without subagent ids end the oldest running node of that type.
+        const n = e.id ? h.nodes.get(e.id) : [...h.nodes.values()].find((x) => x.running && (!e.type || x.type === e.type));
         if (n) {
           n.running = false;
           n.endedAt = now;
         }
+        break;
+      }
+      case "sub_active": {
+        // A prompt may have swept the node while the agent sat between turns: put it back, bare.
+        const n = h.nodes.get(e.id) ?? { id: e.id, type: e.type ?? "agent", parent: null, running: true, startedAt: now };
+        n.running = true;
+        n.endedAt = undefined;
+        h.nodes.set(e.id, n);
         break;
       }
       case "link": {
