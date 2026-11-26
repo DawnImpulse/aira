@@ -4,12 +4,11 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Channel } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
 import { api, type HookEvent, type Project, type PtyMessage, type Script, type Settings } from "../ipc";
 import { dropTab, notify, openTerminalTab, projectById, scriptCwd, scriptsWindow, spaceOfPath, uid, updateConfig, useStore, type AgentStatus, type Term } from "../store";
 import { agentById, type Agent } from "./agents";
-import { popupMenu } from "./menu";
+import { openLink, popupMenu } from "./menu";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { emptyTree, fold, normalize, type AgentEvent, type TreeState } from "./agentEvents";
 
@@ -71,7 +70,7 @@ function xterm(key: string): XT {
   });
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
-  term.loadAddon(new WebLinksAddon((_e, uri) => void openUrl(uri)));
+  term.loadAddon(new WebLinksAddon((_e, uri) => void openLink(uri)));
   term.attachCustomKeyEventHandler((e) => {
     // WebKit also fires keypress for Shift+Enter; left to xterm, that sends a second CR after ours (= submit).
     if (e.type !== "keydown") return !(e.key === "Enter" && e.shiftKey);
@@ -103,6 +102,7 @@ function xterm(key: string): XT {
   term.onData((d) => {
     lastIn.set(key, Date.now());
     if (d === "\x03" || d === "\x1b") interrupted(key); // Ctrl+C / Esc
+    linkHandler: { activate: (_e, uri) => void openLink(uri) }, // OSC 8 hyperlinks; WebLinksAddon covers plain-text URLs
     else answered(key); // typing at a "Needs input" prompt: the agent is working again until its next status hook
     const id = live();
     if (id) api.ptyWrite(id, d).catch(() => {});

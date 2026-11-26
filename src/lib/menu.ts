@@ -1,5 +1,6 @@
 import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
-import { notify } from "../store";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { notify, openBrowserTab } from "../store";
 
 /** Strings are native items: a separator, or an edit action sent to the focused field (`copy:` etc.). */
 export type MenuEntry = { text: string; action: () => void; enabled?: boolean } | "-" | "Cut" | "Copy" | "Paste" | "SelectAll";
@@ -26,4 +27,12 @@ export async function popupMenu(entries: MenuEntry[]) {
   } catch (e) {
     notify(`Menu failed: ${e}`);
   }
+}
+
+/** A link clicked inside the app (terminal, markdown preview): the user picks the embedded or the system browser. */
+export function openLink(url: string) {
+  return popupMenu([
+    { text: "Open in Aira Browser", action: () => openBrowserTab(url) },
+    { text: "Open in System Browser", action: () => void openUrl(url).catch(() => {}) },
+  ]);
 }
