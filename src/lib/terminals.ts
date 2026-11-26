@@ -171,7 +171,7 @@ function xterm(key: string): XT {
     if (get().terms[key]?.agent && !hookActive.has(key)) notifyAgent(key, "Waiting Input");
   });
   term.onResize(({ cols, rows }) => {
-    lastIn.set(key, Date.now()); // an agent's redraw after a resize is not "work"
+    lastResize.set(key, Date.now()); // the redraw that follows is not "work" (see the heuristic)
     const id = live();
     if (id) api.ptyResize(id, cols, rows).catch(() => {});
   });
@@ -380,6 +380,7 @@ async function attachSession(key: string, h: Handoff) {
   if (h.scrollback) x.term.write(h.scrollback);
   if (h.kitty?.length) x.kitty.splice(0, Infinity, ...h.kitty); // the program keeps expecting CSI u keys
   if (h.hooked) hooked.add(key); // keep reading the agent's hook events
+  lastResize.set(key, Date.now()); // pty_attach resizes (SIGWINCH): the redraw of a long transcript can take seconds
   try {
     await api.ptyAttach({ id: h.sessionId, cols: x.term.cols, rows: x.term.rows, onData: channelFor(key, h.sessionId, x) });
   } catch (e) {
@@ -551,6 +552,7 @@ export function stopAllScripts(projectId: string) {
 
 const lastOut = new Map<string, number>();
 const lastIn = new Map<string, number>();
+const lastResize = new Map<string, number>(); // xterm fit or a reattach: the agent redraws, sometimes for seconds
 const QUIET_MS = 20_000; // longest an agent that is working goes without redrawing its spinner, with margin
 
 // ponytail: activity heuristic. Agent TUIs animate a spinner while working and sit still while
@@ -581,8 +583,12 @@ setInterval(() => {
     }
     const out = lastOut.get(t.key) ?? 0;
     const inp = lastIn.get(t.key);
-    const state = inp !== undefined && now - out < 1500 && out - inp > 500 ? "working" : "idle";
     const prev = agentStatus[t.key];
+    // Claude Code reprints its whole transcript on SIGWINCH, for seconds on a long session (every tab, after a
+    // relaunch). So a turn only *starts* on a keystroke newer than the last resize; once working, output alone
+    // keeps it there, and 1.5s of silence ends it.
+    const busy = now - out < 1500;
+    const state = prev?.state === "working" ? (busy ? "working" : "idle") : inp !== undefined && busy && out - inp > 500 && inp > (lastResize.get(t.key) ?? 0) ? "working" : "idle";
     const cut = interruptedAt.has(t.key);
     if (cut && state === "idle") {
       interruptedAt.delete(t.key);
@@ -620,7 +626,7 @@ function notifyAgent(key: string, what: string) {
   lastNotified.set(key, now);
   // Space as the title, the terminal (unique per terminal, numbered) and state as the body.
   const title = spaceOfPath(t.cwd)?.name ?? projectById(t.projectId)?.name ?? t.name;
-  const body = `${t.name} : ${what}`;
+  const body = `${t.name} : ${what}`.toLowerCase();
   api.notifyAgent(key, title, body).catch(() => {}); // resolves on click/clear, so never awaited
   useStore.setState((s) => ({
     notices: [{ key, title, body, at: now }, ...s.notices].slice(0, 50),
