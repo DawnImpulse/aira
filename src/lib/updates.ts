@@ -16,14 +16,14 @@ export type UpdateState = {
 let checking = false;
 let pending: Update | null = null; // found, not installed yet
 let installed: string | undefined; // already swapped into the bundle this session; runs on the next launch
-const EVERY = 12 * 60 * 60 * 1000;
+const EVERY = 15 * 60 * 1000;
 const LAST = "updates:lastCheck";
 /** When the last check ran (any kind), for the Settings Updates tab. */
 export const lastChecked = () => Number(localStorage.getItem(LAST) || 0) || undefined;
 const setUpdate = (update: UpdateState | null) => useStore.setState({ update });
 const patch = (p: Partial<UpdateState>) => useStore.setState((s) => (s.update ? { update: { ...s.update, ...p } } : {}));
 
-/** Automatic checks: at most one per 12 hours, counted across launches; a manual check counts as one. */
+/** Automatic checks: every 15 minutes, counted across launches; a manual check counts as one. */
 export function scheduleUpdateChecks() {
   const tick = () => {
     const last = Number(localStorage.getItem(LAST) ?? 0);
@@ -32,7 +32,7 @@ export function scheduleUpdateChecks() {
     checkForUpdates();
   };
   setTimeout(tick, 15_000); // after the window has settled
-  setInterval(tick, 60 * 60 * 1000); // hourly poll keeps long-running sessions on the 12h cadence
+  setInterval(tick, EVERY);
 }
 
 /**

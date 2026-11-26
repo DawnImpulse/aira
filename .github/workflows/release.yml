@@ -10,6 +10,7 @@ name: Release
 on:
   push:
     branches: [main]
+    paths-ignore: ["docs/**", "plans/**", "**.md"]
   workflow_dispatch:
 permissions:
   contents: write

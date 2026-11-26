@@ -350,7 +350,7 @@ function Updates({ version }: { version: string }) {
       )}
       {(!u || u.stage === "upToDate" || u.stage === "error") && <div className="row gap">{check}</div>}
       <small className="dim">
-        Aira checks automatically every 12 hours{last ? `; last checked ${ago(last)}.` : "."} Updates download in the background and apply on the next restart.
+        Aira checks automatically every 15 minutes{last ? `; last checked ${ago(last)}.` : "."} Updates download in the background and apply on the next restart.
       </small>
     </>
   );

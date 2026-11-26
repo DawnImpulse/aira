@@ -227,6 +227,14 @@ export const spaceOfPath = (path: string) =>
 
 /** Repos the Git tab lists: every repo found in the project, minus linked worktrees that aren't spaces. */
 export const gitReposOf = (p: Project, repos: Repo[] = []) => repos.filter((r) => r.kind !== "worktree" || p.spaces.some((s) => s.dir === r.path));
+/** A space's git: the innermost repo holding its folder (its own, when the folder is a repo), then the repos inside
+ * the folder. Never a repo above that one: a space with its own .git does not show the project's. */
+export function spaceReposOf(p: Project, space: Space, repos?: Repo[]) {
+  const all = gitReposOf(p, repos);
+  const own = all.filter((r) => isUnder(space.dir, r.path)).sort((a, b) => b.path.length - a.path.length)[0];
+  const inside = all.filter((r) => r !== own && isUnder(r.path, space.dir)).sort((a, b) => a.path.localeCompare(b.path));
+  return own ? [own, ...inside] : inside;
+}
 
 /** Changes that fall inside a space dir; a subfolder space also counts a collapsed untracked parent (`packages/`). */
 export function spaceChanges(dir: string, repoPath: string, st?: GitStatus) {
@@ -623,13 +631,21 @@ export function onFsChange(cb: (paths: string[]) => void) {
 function handleFsChange(paths: string[]) {
   const repos = allRepos();
   const hit = new Set<string>();
+  const rediscover = new Set<string>();
   for (const p of paths) {
     const gi = p.indexOf("/.git/");
     if (gi >= 0) {
       // HEAD/index/refs moved: refresh the repo and its worktrees (their gitdirs live in here too).
       const r = p.slice(0, gi);
-      hit.add(r);
-      repos.filter((x) => x.parent === r).forEach((x) => hit.add(x.path));
+      if (repos.some((x) => x.path === r)) {
+        hit.add(r);
+        repos.filter((x) => x.parent === r).forEach((x) => hit.add(x.path));
+      } else {
+        // A repo appeared (`git init` / clone in a shell or by an agent): rediscover the projects it touches.
+        // ponytail: a repo find_repos can't see (deeper than 4 levels, under a SKIP_DIRS name) rediscovers on every git op; pass it as `extra` to git_discover if that ever matters.
+        for (const pr of get().config.projects)
+          if (isUnder(r, pr.path) || pr.spaces.some((s) => isUnder(r, s.dir) || isUnder(s.dir, r))) rediscover.add(pr.id);
+      }
     } else {
       const r = repoOf(p);
       if (r) hit.add(r.path);
@@ -637,6 +653,7 @@ function handleFsChange(paths: string[]) {
     }
   }
   hit.forEach(refreshStatus);
+  rediscover.forEach(discover);
   fsListeners.forEach((cb) => cb(paths));
 }
 
