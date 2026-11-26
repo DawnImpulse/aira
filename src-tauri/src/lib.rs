@@ -189,7 +189,6 @@ pub fn run() {
             ai::ai_set_key,
             ai::ai_commit_message,
             ai::ai_list_models,
-            ai::claude_usage,
             agent::agent_events,
             agent::agent_events_clear,
             agent::agent_usage,
