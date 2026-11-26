@@ -168,7 +168,7 @@ function xterm(key: string): XT {
   });
   term.onBell(() => {
     // Agents also ring the bell when a turn ends, so it only means "needs input" where hooks give no exact status.
-    if (get().terms[key]?.agent && !hookActive.has(key)) notifyAgent(key, "Needs your input");
+    if (get().terms[key]?.agent && !hookActive.has(key)) notifyAgent(key, "Waiting Input");
   });
   term.onResize(({ cols, rows }) => {
     lastIn.set(key, Date.now()); // an agent's redraw after a resize is not "work"
@@ -591,7 +591,7 @@ setInterval(() => {
     if (prev?.state !== state) {
       const finished = prev?.state === "working" && state === "idle" && !cut; // an interrupt isn't "finished"
       put(t.key, { state, since: now, everWorked: !!prev?.everWorked || state === "working", unseen: finished ? !watching(t.key) : state === "working" ? false : prev?.unseen });
-      if (finished && now - prev.since >= 4000) notifyAgent(t.key, "Finished – waiting for you");
+      if (finished && now - prev.since >= 4000) notifyAgent(t.key, "Finished");
     }
   }
   for (const k of Object.keys(agentStatus)) if (!terms[k]) put(k, undefined);
@@ -616,11 +616,11 @@ function notifyAgent(key: string, what: string) {
   if (!t?.agent || !config.settings.notifyAgents) return;
   if (watching(key)) return;
   const now = Date.now();
-  if (now - (lastNotified.get(key) ?? 0) < (what === "Needs your input" ? 10_000 : 5_000)) return;
+  if (now - (lastNotified.get(key) ?? 0) < (what === "Waiting Input" ? 10_000 : 5_000)) return;
   lastNotified.set(key, now);
-  const title = t.name; // unique per terminal (numbered), unlike the agent's label
-  const space = spaceOfPath(t.cwd);
-  const body = space ? `${what} · ${space.name}` : what;
+  // Space as the title, the terminal (unique per terminal, numbered) and state as the body.
+  const title = spaceOfPath(t.cwd)?.name ?? projectById(t.projectId)?.name ?? t.name;
+  const body = `${t.name} : ${what}`;
   api.notifyAgent(key, title, body).catch(() => {}); // resolves on click/clear, so never awaited
   useStore.setState((s) => ({
     notices: [{ key, title, body, at: now }, ...s.notices].slice(0, 50),
@@ -793,6 +793,6 @@ export function applyHookEvents(key: string, events: HookEvent[]) {
       [key]: { state: main, since: now, everWorked: !!prev?.everWorked || main === "working", unseen: finished ? !watching(key) : main === "working" ? false : prev?.unseen },
     },
   }));
-  if (main === "waiting") notifyAgent(key, "Needs your input");
-  else if (finished) notifyAgent(key, "Finished – waiting for you");
+  if (main === "waiting") notifyAgent(key, "Waiting Input");
+  else if (finished) notifyAgent(key, "Finished");
 }
