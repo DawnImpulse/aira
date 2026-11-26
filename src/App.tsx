@@ -10,6 +10,8 @@ import { RightPanel } from "./components/RightPanel";
 import { StatusBar } from "./components/StatusBar";
 import { LinkDialog, ScriptDialog } from "./components/ScriptDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { ConfirmDialog } from "./components/ConfirmDialog";
+import { UpdateProgress } from "./components/UpdateStatus";
 import { NewPathDialog, ProjectDialog, SpaceDialog } from "./components/SpaceDialog";
 
 function TitleBar() {
@@ -45,7 +47,7 @@ function UpdateCard() {
         {u.stage === "downloading" && (
           <>
             <b>Downloading {v}…</b>
-            <progress value={u.progress ?? 0} max={1} />
+            <UpdateProgress u={u} />
           </>
         )}
         {u.stage === "installed" && (
@@ -138,6 +140,7 @@ function ScriptsSummary({ project }: { project: Project }) {
 export default function App() {
   const ready = useStore((s) => s.ready);
   const dialog = useStore((s) => s.dialog);
+  const confirm = useStore((s) => s.confirm);
   const toast = useStore((s) => s.toast);
   const left = usePanelRef();
   const right = usePanelRef();
@@ -186,6 +189,7 @@ export default function App() {
           <Icon name="error" size={16} /> <span>{toast}</span>
         </div>
       )}
+      {confirm && <ConfirmDialog req={confirm} />}
     </div>
   );
 }

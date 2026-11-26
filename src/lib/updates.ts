@@ -6,7 +6,9 @@ export type UpdateState = {
   version: string;
   stage: "available" | "downloading" | "installed" | "upToDate" | "error";
   notes?: string;
-  progress?: number; // 0..1 while downloading
+  progress?: number; // 0..1 while downloading (unknown when the server sends no Content-Length)
+  downloaded?: number; // bytes so far
+  total?: number; // bytes, when known
   error?: string;
   hidden?: boolean;
 };
@@ -16,10 +18,12 @@ let pending: Update | null = null; // found, not installed yet
 let installed: string | undefined; // already swapped into the bundle this session; runs on the next launch
 const EVERY = 12 * 60 * 60 * 1000;
 const LAST = "updates:lastCheck";
+/** When the last check ran (any kind), for the Settings Updates tab. */
+export const lastChecked = () => Number(localStorage.getItem(LAST) || 0) || undefined;
 const setUpdate = (update: UpdateState | null) => useStore.setState({ update });
 const patch = (p: Partial<UpdateState>) => useStore.setState((s) => (s.update ? { update: { ...s.update, ...p } } : {}));
 
-/** Automatic checks: at most one per 12 hours, counted across launches; a manual check doesn't reset the clock. */
+/** Automatic checks: at most one per 12 hours, counted across launches; a manual check counts as one. */
 export function scheduleUpdateChecks() {
   const tick = () => {
     const last = Number(localStorage.getItem(LAST) ?? 0);
@@ -42,6 +46,7 @@ export async function checkForUpdates(manual = false) {
     return;
   }
   checking = true;
+  if (manual) localStorage.setItem(LAST, String(Date.now()));
   try {
     // The running process still reports the old version, so `check()` would offer the same update again.
     if (installed) {
@@ -72,13 +77,15 @@ export async function installUpdate() {
   pending = null;
   let total = 0;
   let got = 0;
-  setUpdate({ version: u.version, stage: "downloading", progress: 0 });
+  setUpdate({ version: u.version, stage: "downloading", progress: 0, downloaded: 0 });
   try {
     await u.downloadAndInstall((e) => {
-      if (e.event === "Started") total = e.data.contentLength ?? 0;
-      else if (e.event === "Progress") {
+      if (e.event === "Started") {
+        total = e.data.contentLength ?? 0;
+        patch({ total: total || undefined });
+      } else if (e.event === "Progress") {
         got += e.data.chunkLength;
-        if (total) patch({ progress: got / total });
+        patch({ downloaded: got, progress: total ? got / total : undefined });
       }
     });
     installed = u.version;
