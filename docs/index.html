@@ -4,406 +4,518 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aira · All your projects, running at once</title>
-<meta name="description" content="Aira is a Mac code editor for many projects at once: dev servers, coding agents and git for every project you have open, in one window.">
-<meta name="theme-color" content="#0b0b0c">
+<meta name="description" content="Aira (aye-ra) is a Mac code editor for people who keep many projects open at once: dev servers, coding agents and git for every project, side by side in one window.">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0b0c" media="(prefers-color-scheme: dark)">
 <link rel="canonical" href="https://aira.codevry.com/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Aira">
 <meta property="og:title" content="Aira · All your projects, running at once">
-<meta property="og:description" content="Aira is a Mac code editor for many projects at once: dev servers, coding agents and git for every project you have open, in one window.">
+<meta property="og:description" content="Aira (aye-ra) is a Mac code editor for people who keep many projects open at once: dev servers, coding agents and git for every project, side by side in one window.">
 <meta property="og:url" content="https://aira.codevry.com/">
 <meta property="og:image" content="https://aira.codevry.com/og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The Aira app window with three projects open, under the headline: All your projects, running at once.">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebSite", "name": "Aira", "url": "https://aira.codevry.com/"}</script>
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preload" href="fonts/funnel-display-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/funnel-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="site.css?v=2">
-<script src="site.js?v=3" defer></script>
+<link rel="stylesheet" href="site.css?v=3">
+<script src="site.js?v=4" defer></script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebSite", "name": "Aira", "url": "https://aira.codevry.com/"}</script>
 <style>
-  /* ---------- intro stage ---------- */
-  .stage {
-    position: relative; isolation: isolate; min-height: 100svh; overflow: clip;
-    display: grid; place-content: center; justify-items: center; text-align: center;
-    padding: 8rem 1.25rem 6rem;
+  /* ---------- hero: centred copy, drifting colour behind, the main pane cycling its tabs below ---------- */
+  .hero { position: relative; isolation: isolate; padding-block: clamp(4rem, 9vw, 7rem) 0; text-align: center; }
+  /* Three soft blobs in the project hues drift behind the copy and slowly turn through the spectrum. */
+  .blobs { position: absolute; inset: -10rem 0 auto; z-index: -1; height: 60rem; overflow: hidden; pointer-events: none; }
+  .blobs i {
+    position: absolute; width: 44vw; height: 44vw; min-width: 22rem; min-height: 22rem; border-radius: 50%; opacity: 0.55;
+    background: radial-gradient(closest-side, hsl(var(--h) 85% 72% / 0.55), transparent 70%);
+    animation: drift var(--t) ease-in-out infinite alternate, hue 24s linear infinite;
   }
-  /* Five lit channels, one per project hue (DESIGN.md "The Switchboard"). Gradients, not blur, so it stays smooth on phones. */
-  .beams { position: absolute; inset: 0; z-index: -1; overflow: hidden; background: #000; pointer-events: none; }
-  .beams i {
-    position: absolute; top: -30%; left: var(--x); width: var(--w); height: 160%; rotate: 28deg;
-    background: linear-gradient(90deg, transparent, hsl(var(--h) 72% 58% / 0.22) 22%, hsl(var(--h) 76% 64% / 0.55) 46%, hsl(var(--h) 82% 72% / 0.7) 50%, hsl(var(--h) 76% 64% / 0.55) 54%, hsl(var(--h) 72% 58% / 0.22) 78%, transparent);
-    -webkit-mask: linear-gradient(transparent, #000 28% 62%, transparent);
-    mask: linear-gradient(transparent, #000 28% 62%, transparent);
-  }
-  /* Film grain, only visible where there is light (overlay on black stays black). */
-  .beams::after {
-    content: ""; position: absolute; inset: 0; mix-blend-mode: overlay; opacity: 0.6;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E") 0 0 / 180px;
-  }
-  /* Darkness along the top edge, so the clear nav reads over the stage. */
-  .stage .beams::before { content: ""; position: absolute; inset: 0 0 auto; z-index: 1; height: 8rem; background: linear-gradient(#000 35%, transparent); }
-  /* A dark pool sized to the words keeps them readable over the light at every viewport. */
-  .stage-copy, .finale-copy { position: relative; display: grid; justify-items: center; }
-  .stage-copy::before, .finale-copy::before {
-    content: ""; position: absolute; inset: -26% -20% -34%; z-index: -1; pointer-events: none;
-    background: radial-gradient(closest-side, rgb(0 0 0 / 0.92), rgb(0 0 0 / 0.86) 66%, transparent);
-  }
-  .stage h1 { font-size: clamp(2.5rem, 1.2rem + 5.4vw, 5.75rem); font-weight: 640; letter-spacing: -0.03em; }
-  .stage h1, .lede, .note, .finale h2, .finale-copy > p { text-shadow: 0 1px 14px rgb(0 0 0 / 0.85), 0 0 2px rgb(0 0 0 / 0.6); }
-  .stage h1 span { display: block; }
-  .lede { max-width: 38rem; margin: 1.5rem 0 2.25rem; font-size: clamp(1.125rem, 1rem + 0.4vw, 1.3125rem); line-height: 1.6; color: var(--soft); }
-  .cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; }
-  .note { margin: 1.4rem 0 0; padding: 0.35rem 0.8rem; border-radius: 8px; background: rgb(0 0 0 / 0.82); font: 400 0.8125rem / 1.5 var(--mono); font-stretch: 87.5%; color: var(--prose); }
+  .blobs i:nth-child(1) { --h: 210; --t: 14s; left: -8vw; top: -4rem; }
+  .blobs i:nth-child(2) { --h: 330; --t: 18s; right: -10vw; top: 2rem; animation-delay: -6s, -8s; }
+  .blobs i:nth-child(3) { --h: 180; --t: 16s; left: 30vw; top: 16rem; animation-delay: -10s, -16s; }
+  .blobs::after { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent 55%, var(--bg)); }
+  @keyframes drift { from { translate: 0 0; scale: 1; } to { translate: 12vw 6rem; scale: 1.25; } }
+  @keyframes hue { to { filter: hue-rotate(360deg); } }
+  .hero h1 { font-size: clamp(2.6rem, 1.3rem + 5vw, 5.25rem); max-width: 16ch; margin-inline: auto; }
+  .hero h1 .ac { color: var(--accent-ink); }
+  .lede { max-width: 36rem; margin: 1.5rem auto 0; font-size: clamp(1.0625rem, 1rem + 0.35vw, 1.25rem); line-height: 1.55; color: var(--prose); }
+  .cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.75rem; margin-top: 2rem; }
+  .note { margin: 1.25rem 0 0; font: 400 0.75rem / 1.5 var(--mono); font-stretch: 87.5%; color: var(--dim); }
 
-  /* ---------- product window ---------- */
-  .window-shot { position: relative; isolation: isolate; width: min(100% - 2.5rem, 66rem); margin: clamp(-4rem, -6vw, -2rem) auto 0; }
-  .window-shot .clip { box-shadow: 0 0 0 1px var(--ring), 0 50px 120px -40px rgb(0 0 0 / 0.85); }
-  .window-shot::before {
-    content: ""; position: absolute; inset: -12% -6% -4%; z-index: -1; pointer-events: none;
-    background:
-      radial-gradient(36% 44% at 18% 40%, hsl(210 72% 60% / 0.22), transparent 72%),
-      radial-gradient(32% 40% at 52% 80%, hsl(180 72% 60% / 0.12), transparent 72%),
-      radial-gradient(32% 42% at 86% 34%, hsl(330 72% 60% / 0.16), transparent 72%);
+  /* The stage: the main pane (its tabs cycle once a second) with three windows floating over it. */
+  .stage { position: relative; width: min(100% - 2 * var(--gutter), 58rem); margin: clamp(2.5rem, 6vw, 4rem) auto 0; }
+  /* The pane crops are nearly square; the frame shows their top at 16:10, where the tabs and the work are. */
+  .pane { position: relative; display: grid; margin: 0; aspect-ratio: 16 / 10; border-radius: var(--radius); box-shadow: var(--shadow); background: #0b0b0c; overflow: hidden; }
+  .pane-shot { grid-area: 1 / 1; display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; opacity: 0; transition: opacity 0.35s var(--ease); }
+  .pane-shot.on { opacity: 1; }
+  /* The floating windows bob slowly, each on its own period, so they read as hovering over the pane. */
+  .float { position: absolute; z-index: 1; border-radius: 10px; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 30px 60px -20px rgb(0 0 0 / 0.55); overflow: hidden; background: #0f0f11; animation: bob var(--bob, 6s) ease-in-out infinite alternate; }
+  .float img { width: 100%; }
+  .float.git { --bob: 7s; animation-delay: -2s; }
+  .float.ports { --bob: 5.5s; animation-delay: -4s; }
+  @keyframes bob { from { translate: 0 -0.4rem; } to { translate: 0 0.4rem; } }
+  /* The Git panel crop is tall; the float shows its top (the changes tree across repos). */
+  .float.git { right: -3rem; top: 2rem; width: 18rem; height: 19rem; }
+  .float.git img { height: 100%; object-fit: cover; object-position: top; }
+  .float.ports { right: -2rem; bottom: -2.5rem; width: 17rem; }
+  .float.spaces { left: -3rem; bottom: -2rem; width: 18.5rem; }
+
+  /* The spaces window is live markup, so the spinners turn and the working card's halo moves. Colours are the
+     app's dark theme (src/styles.css), not the page's tokens, because it is a picture of the app. */
+  .spaces { padding: 10px 8px 8px; color: #e6e6ea; font: 400 13px / 1.35 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; text-align: left; }
+  .spaces .proj { display: flex; align-items: center; gap: 6px; padding: 2px 6px 8px; color: #6aa8ff; font-weight: 600; }
+  .spaces .proj::before { content: "⌄"; color: #8d8d96; font-weight: 400; }
+  .sc { position: relative; isolation: isolate; display: grid; gap: 2px; padding: 6px 8px 7px 13px; border: 1px solid transparent; border-radius: 10px; }
+  .sc::before { content: ""; position: absolute; left: 3px; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: #3b3b44; }
+  .sc.on { background: #16161a; border-color: #34343c; }
+  .sc.on::before { background: #6aa8ff; }
+  .sc + .sc { margin-top: 4px; }
+  .sc .t { display: flex; align-items: center; gap: 6px; font-weight: 600; color: #f3f3f6; }
+  .sc .t .live { width: 7px; height: 7px; border-radius: 50%; background: #3fcf6e; }
+  .sc .t .star { margin-left: auto; color: #e6b450; font-size: 12px; }
+  .sc .t .star.off { color: #5c5c65; }
+  .sc .s { display: flex; justify-content: space-between; gap: 8px; padding-left: 0; font-size: 12px; color: #8d8d96; }
+  .sc .s em { font-style: normal; color: #e6b450; }
+  .sc .a { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #c9c9d1; }
+  .sc .a .age { margin-left: auto; color: #8d8d96; }
+  .sc .a .w { color: #3fcf6e; }
+  .sc .a .d { color: #e6e6ea; }
+  .sc .a b { font-weight: 600; color: #f3f3f6; }
+  .sc .sub { padding-left: 14px; }
+  .sc .sub.deep { padding-left: 28px; }
+  .spin { display: inline-block; flex: none; width: 11px; height: 11px; border-radius: 50%; border: 2px solid rgb(201 201 209 / 0.25); border-top-color: #c9c9d1; animation: spin 0.8s linear infinite; }
+  .a .w + .spin, .w ~ .spin { display: none; }
+  .spin.g { border-color: rgb(63 207 110 / 0.3); border-top-color: #3fcf6e; }
+  .ico { display: inline-grid; place-items: center; width: 12px; height: 12px; border-radius: 2px; font-size: 8px; line-height: 1; }
+  .ico.claude { background: #d97757; color: #0b0b0c; }
+  .ico.gemini { background: #4796e3; color: #0b0b0c; }
+  @keyframes spin { to { rotate: 1turn; } }
+  /* The halo: a beam of Signal Blue running round the working card's border (the app's working-agent beam). */
+  @property --halo { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+  .sc.working::after {
+    content: ""; position: absolute; inset: -1px; z-index: -1; border-radius: 11px; padding: 1.5px;
+    background: conic-gradient(from var(--halo), transparent 0 62%, #6aa8ff 82%, #e9f0ff 88%, transparent 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude;
+    animation: halo 3.2s linear infinite;
   }
-
-  /* ---------- sections ---------- */
-  .section { margin-block: clamp(6rem, 13vw, 10rem); }
-  .section-head { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 1.5rem clamp(1.5rem, 6vw, 6rem); align-items: end; margin-bottom: clamp(2rem, 4vw, 3rem); }
-  .section-head h2, .agents h2 { font-size: clamp(2.1rem, 1.3rem + 2.9vw, 3.5rem); }
-  .section-head p { margin: 0; max-width: 34rem; color: var(--prose); }
-  .more { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 0.9rem; color: var(--ink); font-weight: 600; text-decoration: none; }
-  .more svg { width: 1rem; height: 1rem; fill: currentColor; transition: translate 0.3s var(--ease); }
-  .more:hover { text-decoration: underline; text-underline-offset: 0.2em; }
-  .more:hover svg { translate: 0.2rem 0; }
-
-  /* ---------- feature cards: one project hue each, a real recording inside ---------- */
-  .bento { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(1rem, 2vw, 1.5rem); }
-  .card {
-    display: grid; align-content: start; gap: 1.5rem; padding: clamp(1.25rem, 2.6vw, 2rem);
-    border: 1px solid hsl(var(--h) 72% 60% / 0.3); border-radius: 18px;
-    background: radial-gradient(120% 70% at 50% 0%, hsl(var(--h) 72% 60% / 0.2), transparent 64%), linear-gradient(hsl(var(--h) 40% 12% / 0.35), transparent 40%), var(--panel);
-    box-shadow: inset 0 1px 0 hsl(var(--h) 72% 80% / 0.12);
+  @keyframes halo { to { --halo: 360deg; } }
+  /* A finished agent's card breathes in its project hue until the space is opened (the app's 4s breathe). */
+  .sc.done::after {
+    content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+    background: radial-gradient(120% 160% at 0% 50%, hsl(210 72% 60% / 0.3), transparent 70%), linear-gradient(90deg, hsl(210 72% 60% / 0.1), transparent);
+    animation: breathe 4s ease-in-out infinite;
   }
-  /* The lead card: copy beside its recording. */
-  .card.wide { grid-column: 1 / -1; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); align-items: center; gap: clamp(1.5rem, 4vw, 3rem); }
-  .card h3 { display: flex; align-items: flex-start; gap: 0.65rem; font-size: 1.375rem; line-height: 1.2; }
-  /* The app's project squircle, in the card's hue. */
-  .card h3 i { flex: none; width: 0.8rem; height: 0.8rem; margin-top: 0.28em; border-radius: 0.28rem; background: hsl(var(--h) 72% 60%); }
-  .card .copy p { margin: 0.6rem 0 0; color: var(--prose); max-width: 36rem; }
-  .card.rest { align-content: space-between; }
-  .card.rest ul { display: grid; gap: 0.9rem; margin: 1.25rem 0 0; padding: 0; list-style: none; color: var(--prose); }
-  .card.rest li { position: relative; padding-left: 1.35rem; }
-  .card.rest li::before { content: ""; position: absolute; left: 0.1rem; top: 0.62em; width: 0.42rem; height: 0.42rem; border-radius: 0.15rem; background: hsl(var(--h) 72% 60% / 0.85); }
-  .rest-links { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+  @keyframes breathe { 0%, 100% { opacity: 0.12; } 45% { opacity: 0.95; } 60% { opacity: 0.7; } }
 
-  /* ---------- agents: brand-tinted chips in three staggered rows ---------- */
-  .agents { text-align: center; }
-  .agents > p { max-width: 36rem; margin: 1.1rem auto 0; color: var(--prose); }
-  .chips { margin: clamp(2rem, 4vw, 2.75rem) auto 0; padding: 0; list-style: none; font-size: 0; }
-  .chips li { display: inline; }
-  .chip {
-    display: inline-flex; align-items: center; gap: 0.6rem; margin: 0.3rem; padding: 0.75rem 1.05rem 0.75rem 0.75rem;
-    border: 1px solid color-mix(in oklab, var(--c) 42%, var(--border)); border-radius: 999px;
-    background: linear-gradient(color-mix(in oklab, var(--c) 16%, var(--panel)), color-mix(in oklab, var(--c) 7%, var(--panel)));
-    box-shadow: inset 0 1px 0 color-mix(in oklab, var(--c) 30%, transparent);
-    font: 500 1rem / 1.3 var(--font); color: var(--ink); white-space: nowrap;
-  }
-  .chip img, .chip .mask { flex: none; width: 1.375rem; height: 1.375rem; }
-  /* Single-colour logos are drawn with currentColor; as masks they take the page's ink instead of rendering black. */
-  .chip .mask { background: var(--ink); -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; }
-  .chip.any { --c: var(--border-strong); border-style: dashed; background: transparent; box-shadow: none; color: var(--soft); }
-  .chip .prompt { flex: none; width: 1.375rem; font: 500 0.8125rem / 1 var(--mono); font-stretch: 87.5%; color: var(--accent); text-align: center; }
-  /* How each agent is tracked: a shape, not just a colour (WCAG 1.4.1). */
-  .mark { flex: none; width: 0.55rem; height: 0.55rem; border-radius: 50%; color: var(--soft); box-shadow: inset 0 0 0 1.5px currentColor; }
-  .mark.exact { background: currentColor; }
-  .mark.hook { background: linear-gradient(90deg, currentColor 50%, transparent 0); }
-  .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.5rem; margin: 1.5rem auto 0; padding: 0; list-style: none; font-size: var(--text-sm); color: var(--prose); }
-  .legend li { display: inline-flex; align-items: center; gap: 0.5rem; }
-  .agents .legal { margin: 1.25rem auto 0; font-size: var(--text-sm); color: var(--dim); }
-  #agents { margin-bottom: clamp(3rem, 6vw, 5rem); }
-
-  /* ---------- finale ---------- */
-  .finale { position: relative; isolation: isolate; overflow: clip; padding: clamp(6rem, 12vw, 9rem) 1.25rem; text-align: center; }
-  .finale .beams { opacity: 0.6; }
-  .finale h2 { font-size: clamp(2.6rem, 1.4rem + 4.6vw, 4.75rem); letter-spacing: -0.03em; }
-  .finale-copy > p { max-width: 36rem; margin: 1.25rem auto 0; color: var(--soft); }
-  .finale .cta { margin-top: 2rem; }
-  .finale .note { margin-top: 1rem; }
-  /* min-width 0: as a grid item it would otherwise stretch the column to the unbreakable clone line and overflow phones. */
-  .finale .code { width: min(100%, 40rem); min-width: 0; margin: 2rem auto 1.5rem; }
-  .finale .after { max-width: 40rem; margin: 0 auto; font-size: var(--text-sm); color: var(--dim); }
-
+  .cells { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: min(100% - 2 * var(--gutter), 58rem); margin: clamp(3.5rem, 7vw, 5rem) auto 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; text-align: left; }
+  .cells > div { padding: 1.1rem 1.5rem; border-right: 1px solid var(--border); }
+  .cells > div:last-child { border-right: 0; }
+  .cells b { display: flex; align-items: center; gap: 0.45rem; margin-top: 0.3rem; color: var(--ink); font-weight: 500; }
+  .cells svg { width: 1rem; height: 1rem; fill: currentColor; }
+  .cells .dot { display: inline-block; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--accent); }
   @media (max-width: 860px) {
-    .bento { grid-template-columns: minmax(0, 1fr); }
-    .card.wide, .section-head { grid-template-columns: minmax(0, 1fr); }
-  }
-  @media (min-width: 761px) {
-    /* Three rows (5 · 4 · 4); centring rows of different widths staggers them like bricks. */
-    .chips li:nth-child(5)::after, .chips li:nth-child(9)::after { content: "\A"; white-space: pre; }
-  }
-  @media (max-width: 560px) {
-    .note { max-width: 17.5rem; text-wrap: balance; }
-    .chip { padding-block: 0.6rem; margin: 0.22rem; font-size: var(--text-sm); }
+    /* No room to float on phones: the spaces card sits under the pane at full width, the other two go. */
+    .float.spaces { position: static; width: min(100%, 22rem); margin: 1rem auto 0; }
+    .float.git, .float.ports { display: none; }
+    .cells { grid-template-columns: repeat(2, 1fr); }
+    .cells > div:nth-child(2) { border-right: 0; }
+    .cells > div:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
   }
 
-  /* ---------- motion ---------- */
-  @media (prefers-reduced-motion: no-preference) {
-    .stage h1 span, .stage .lede, .stage .cta, .stage .note { animation: rise 0.8s var(--ease) both; }
-    .stage h1 span + span { animation-delay: 0.08s; }
-    .stage .lede { animation-delay: 0.9s; }
-    .stage .cta { animation-delay: 1.05s; }
-    .stage .note { animation-delay: 1.15s; }
-    /* Channels come online one at a time; everything settles by about 2.7s (no pause control needed). */
-    .stage .beams i { animation: lamp 1s var(--ease) both; animation-delay: calc(0.35s + var(--i) * 0.3s); }
-    .window-shot .clip { animation: rise 1.1s 1.2s var(--ease) both; }
-    /* Chips rise in one after another as the row scrolls into view; without scroll timelines they just sit there. */
-    @supports (animation-timeline: view()) {
-      .chip { animation: rise linear both; animation-timeline: view(); animation-range: entry calc(var(--i) * 4%) cover calc(18% + var(--i) * 1.5%); }
-    }
-  }
-  @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
-  @keyframes lamp { from { opacity: 0; scale: 1 0.55; } }
+  /* ---------- section rhythm ---------- */
+  .section { padding-block: clamp(4rem, 9vw, 7.5rem); }
+  .section + .section { padding-top: 0; }
+  .section-head { max-width: 40rem; margin-bottom: clamp(2rem, 4vw, 3.5rem); }
+  .section-head h2 { font-size: clamp(2rem, 1.3rem + 2.6vw, 3.25rem); }
+  .section-head p { margin: 1rem 0 0; font-size: 1.125rem; color: var(--prose); }
+  .section-head p.label { margin: 0 0 0.75rem; font-size: 0.6875rem; color: var(--accent-ink); }
+  .centered { text-align: center; margin-inline: auto; }
+
+  /* ---------- works with: a ruled logo grid with tracking marks ---------- */
+  .agents-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; margin: 0; padding: 0; list-style: none; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .agent { display: grid; justify-items: center; align-content: center; gap: 0.6rem; min-height: 7.5rem; padding: 1.25rem 0.75rem; background: var(--bg); text-align: center; }
+  .agent:hover { background: var(--panel); }
+  .agent img { width: 1.75rem; height: 1.75rem; }
+  /* Single-colour logos are drawn in currentColor (black); invert them on the dark palette. */
+  .agent img.mono { filter: invert(var(--inv)); }
+  .agent b { font-size: 0.9375rem; font-weight: 600; }
+  .agent .prompt-ic { display: grid; place-items: center; width: 1.75rem; height: 1.75rem; font: 600 0.8125rem / 1 var(--mono); color: var(--accent-ink); }
+  /* Claude Code leads: the one agent with every signal, on a row of its own. */
+  .agent.lead { grid-column: 1 / -1; grid-template-columns: auto minmax(0, 1fr) auto; justify-items: start; align-items: center; gap: 1.25rem; min-height: 0; padding: 1.5rem 1.75rem; text-align: left; background: var(--panel); }
+  .agent.lead img { width: 2.5rem; height: 2.5rem; }
+  .agent.lead b { display: inline; font-size: 1.125rem; }
+  .agent.lead p { margin: 0.35rem 0 0; max-width: 46rem; font-size: 0.9375rem; color: var(--prose); }
+  .agent.lead .badge { display: inline-block; margin-left: 0.6rem; padding: 0.2rem 0.6rem; border-radius: 999px; background: var(--accent); color: var(--on-accent); font: 600 0.6875rem / 1.3 var(--mono); font-stretch: 87.5%; letter-spacing: 0.08em; text-transform: uppercase; vertical-align: 0.15em; }
+  @media (max-width: 700px) { .agent.lead { grid-template-columns: auto minmax(0, 1fr); } .agent.lead small { grid-column: 2; } }
+  .agent small { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: var(--dim); }
+  /* How each agent is tracked: a shape, not just a colour (WCAG 1.4.1). */
+  .mark { flex: none; width: 0.5rem; height: 0.5rem; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--prose); }
+  .mark.exact { background: var(--prose); }
+  .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1.75rem; margin: 1.5rem 0 0; padding: 0; list-style: none; font-size: var(--text-sm); color: var(--prose); }
+  .legend li { display: inline-flex; align-items: center; gap: 0.5rem; }
+  .legal { margin: 1rem 0 0; text-align: center; font-size: 0.8125rem; color: var(--dim); }
+  @media (max-width: 900px) { .agents-grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 480px) { .agents-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  /* ---------- split card: the agents story beside its screenshot ---------- */
+  .split { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); align-items: center; gap: clamp(2rem, 5vw, 4rem); padding: clamp(1.5rem, 4vw, 3rem); border: 1px solid var(--border); border-radius: 20px; background: var(--panel); }
+  .split h2 { font-size: clamp(1.9rem, 1.2rem + 2.2vw, 2.75rem); }
+  .split .lead { margin: 1rem 0 0; max-width: 32rem; font-size: 1.0625rem; color: var(--prose); }
+  .split .more { margin-top: 1.25rem; }
+  .pairs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.4rem 2rem; margin: 1.75rem 0 0; padding: 0; list-style: none; }
+  .pairs li { display: grid; grid-template-columns: auto 1fr; gap: 0.75rem; align-items: start; }
+  .pairs i { position: relative; display: block; width: 1.75rem; height: 1.75rem; margin-top: 0.1rem; border-radius: 0.5rem; background: var(--accent-soft); }
+  .pairs i::after { content: ""; position: absolute; inset: 0.55rem; border-radius: 0.2rem; background: var(--accent); }
+  .pairs b { display: block; font-weight: 600; }
+  .pairs span { font-size: 0.9375rem; color: var(--prose); }
+  .split-media { position: relative; }
+  .split-media .float { position: absolute; left: -1.5rem; bottom: -1.5rem; width: 24%; }
+  @media (max-width: 900px) { .split { grid-template-columns: minmax(0, 1fr); } .split-media .float { left: 0.5rem; bottom: -1rem; width: 30%; } }
+  @media (max-width: 560px) { .pairs { grid-template-columns: minmax(0, 1fr); } }
+
+  /* ---------- hub: four things every project brings, wired into one window ---------- */
+  /* Two cards each side, wired into the one tile in the middle. */
+  .hub { display: grid; grid-template-columns: minmax(0, 1fr) 5rem auto 5rem minmax(0, 1fr); align-items: center; width: min(100%, 64rem); margin-inline: auto; }
+  .hub-cards { display: grid; gap: 1rem; margin: 0; padding: 0; list-style: none; }
+  .hub-wire.flip { scale: -1 1; }
+  .hub-cards li { display: grid; grid-template-columns: auto 1fr; gap: 1rem; align-items: start; padding: 1.25rem 1.35rem; border: 1px solid var(--border); border-radius: 14px; background: var(--bg); box-shadow: var(--shadow-sm); transition: translate 0.3s var(--ease), box-shadow 0.3s var(--ease); }
+  .hub-cards li:hover { translate: 0 -3px; box-shadow: var(--shadow); }
+  .hub-cards b { display: block; margin-bottom: 0.25rem; font-weight: 600; }
+  .hub-cards p { margin: 0; font-size: var(--text-sm); color: var(--prose); }
+  /* Each card's icon sits on a tile in its own project hue (the app's Channel Hues), and breathes a little. */
+  .hi { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 12px; background: light-dark(hsl(var(--c) 85% 93%), hsl(var(--c) 40% 18%)); color: light-dark(hsl(var(--c) 70% 38%), hsl(var(--c) 80% 72%)); box-shadow: 0 8px 20px -10px hsl(var(--c) 70% 50% / 0.5); animation: hi-breathe 5s ease-in-out infinite; }
+  .hub-cards li:nth-child(2) .hi { animation-delay: -2.5s; }
+  .hi svg { width: 1.5rem; height: 1.5rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  @keyframes hi-breathe { 0%, 100% { scale: 1; } 50% { scale: 1.08; } }
+  /* Wires carry a dash that flows into the tile. */
+  .hub-wire { width: 100%; height: 100%; min-height: 12rem; overflow: visible; }
+  .hub-wire path { fill: none; stroke: var(--border-strong); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .hub-wire path + path, .hub-wire path:first-child { stroke-dasharray: 7 9; animation: flow 1.6s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -32; } }
+  /* The tile pulses and a halo runs round it. */
+  .hub-tile { position: relative; isolation: isolate; animation: tile-pulse 4s ease-in-out infinite; }
+  .hub-tile::before { content: ""; position: absolute; inset: -5px; z-index: -1; border-radius: 32px; padding: 2px; background: conic-gradient(from var(--halo), transparent 0 55%, hsl(210 90% 75%) 78%, hsl(180 80% 70%) 86%, transparent 100%); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; animation: halo 4s linear infinite; }
+  @keyframes tile-pulse { 0%, 100% { box-shadow: 0 30px 60px -20px var(--accent-glow), inset 0 1px 0 rgb(255 255 255 / 0.35); } 50% { box-shadow: 0 30px 70px -14px var(--accent-glow), 0 0 0 10px color-mix(in oklab, var(--accent) 10%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.35); } }
+  .hub-tile { display: grid; place-content: center; justify-items: center; gap: 0.9rem; width: 11rem; height: 11rem; border-radius: 28px; background: var(--accent); color: var(--on-accent); box-shadow: 0 30px 60px -20px var(--accent-glow), inset 0 1px 0 rgb(255 255 255 / 0.35); }
+  .hub-tile img { width: 4rem; height: 4rem; }
+  .hub-tile small { font: 500 0.6875rem / 1 var(--mono); font-stretch: 87.5%; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.85; }
+  @media (max-width: 760px) { .hub { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 1.5rem; } .hub-wire { display: none; } .hub-cards { width: 100%; } .hub-tile { order: -1; } }
+
+  /* ---------- bento: one accent tile, the rest paper, real screenshots inside ---------- */
+  .bento { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 1rem; }
+  .tile { position: relative; overflow: hidden; display: grid; align-content: start; gap: 0.75rem; padding: clamp(1.25rem, 2.6vw, 1.75rem); border: 1px solid var(--border); border-radius: 20px; background: var(--bg); }
+  .tile h3 { font-size: 1.375rem; }
+  .tile > p { margin: 0; max-width: 30rem; font-size: 0.9375rem; color: var(--prose); }
+  .tile.accent { background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: 0 30px 60px -24px var(--accent-glow); }
+  .tile.accent h3 { color: inherit; font-size: clamp(1.6rem, 1.2rem + 1.2vw, 2.1rem); }
+  .tile.accent > p { color: inherit; opacity: 0.88; }
+  .tile.panel { background: var(--panel); }
+  .tile .pic { margin: 0.5rem 0 0; border-radius: 10px; overflow: hidden; box-shadow: var(--shadow-sm); }
+  .tile .pic.small { width: min(100%, 19rem); }
+  .tile .pic img { width: 100%; border-radius: 0; }
+  /* The Git tile: the panel crop beside a live Generate block in the app's dark palette. */
+  .git-crop { width: 100%; aspect-ratio: 644 / 520; }
+  .git-crop img { height: 100%; object-fit: cover; object-position: top; }
+  .gen { margin-top: 0.5rem; display: grid; gap: 0.7rem; padding: 0.9rem; border-radius: 10px; background: #0f0f11; color: #e6e6ea; font: 400 12px / 1.4 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; box-shadow: var(--shadow-sm); }
+  .gen-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; color: #8d8d96; }
+  .gen-row b { color: #f3f3f6; }
+  .gen .sq { display: inline-block; width: 9px; height: 9px; margin: 0 4px 0 2px; border-radius: 2px; background: #6aa8ff; vertical-align: -1px; }
+  .gen button { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: 1px solid #34343c; border-radius: 7px; background: #16161a; color: #e6e6ea; font: 500 12px / 1 inherit; font-family: inherit; pointer-events: none; }
+  .gen-btn svg { width: 12px; height: 12px; fill: currentColor; }
+  .gen-btn .spin { display: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid rgb(230 230 234 / 0.25); border-top-color: #e6e6ea; animation: spin 0.8s linear infinite; }
+  .gen.working .gen-btn .spin { display: inline-block; }
+  .gen.working .gen-btn svg { display: none; }
+  .gen-msg { min-height: 5.6em; margin: 0; padding: 8px 10px; border: 1px solid #34343c; border-radius: 7px; background: #0b0b0c; font: 400 12px / 1.45 var(--mono); font-stretch: 87.5%; white-space: pre-wrap; overflow-wrap: anywhere; color: #e6e6ea; }
+  .gen-msg .caret { display: inline-block; width: 6px; height: 1.1em; vertical-align: -0.15em; background: #6aa8ff; animation: blink 1s steps(1) infinite; }
+  .gen-commit { border-color: #6aa8ff !important; background: #6aa8ff !important; color: #06101f !important; opacity: 0.35; transition: opacity 0.3s; }
+  .gen.done .gen-commit { opacity: 1; }
+  .gen-ghost { background: transparent !important; }
+  /* Two tiles stacked in one slot, beside the tall Spaces tile: the crop and the Generate block sit side by side with their copy. */
+  .stack { display: grid; gap: 1rem; }
+  .stack .tile { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "h pic" "p pic"; column-gap: 1.5rem; align-content: start; }
+  .stack .tile h3 { grid-area: h; align-self: end; }
+  .stack .tile > p { grid-area: p; align-self: start; }
+  .stack .tile .pic, .stack .tile .gen { grid-area: pic; margin: 0; align-self: center; }
+  @media (max-width: 700px) { .stack .tile { grid-template-columns: minmax(0, 1fr); grid-template-areas: "h" "p" "pic"; } }
+  .span5 { grid-column: span 5; }
+  .span7 { grid-column: span 7; }
+  @media (max-width: 900px) { .span5, .span7 { grid-column: span 12; } }
+
+  /* ---------- deck: five small cards, one lifted in accent ---------- */
+  .deck { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; margin: 0; padding: 0; list-style: none; }
+  .card { display: grid; gap: 0.6rem; justify-items: center; padding: 1.75rem 1.25rem; border: 1px solid var(--border); border-radius: 18px; background: var(--bg); text-align: center; box-shadow: var(--shadow-sm); transition: translate 0.3s var(--ease), rotate 0.3s var(--ease); }
+  .card:nth-child(odd) { rotate: -1.5deg; }
+  .card:nth-child(even) { rotate: 1.5deg; translate: 0 0.75rem; }
+  .card:hover { rotate: 0deg; translate: 0 -0.25rem; }
+  .card .ic { display: grid; place-items: center; width: 3rem; height: 3rem; border-radius: 14px; background: var(--accent-soft); color: var(--accent-ink); }
+  .card .ic svg { width: 1.4rem; height: 1.4rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+  /* Each icon does its thing: the prompt's cursor blinks, the sun turns, the bell rings, the moon rocks, keys press. */
+  .ic .cursor { animation: blink 1.1s steps(1) infinite; }
+  .ic .sun { transform-origin: 12px 12px; animation: turn 9s linear infinite; }
+  .ic .bell { transform-origin: 12px 4px; animation: ring 2.6s ease-in-out infinite; }
+  .ic .moon { transform-origin: 12px 12px; animation: rock 4s ease-in-out infinite; }
+  .ic .key { animation: press 2.4s ease-in-out infinite; }
+  .ic .key:nth-child(2) { animation-delay: 0.6s; }
+  .ic .key:nth-child(3) { animation-delay: 1.2s; }
+  .ic .key:nth-child(4) { animation-delay: 1.8s; }
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes turn { to { rotate: 360deg; } }
+  @keyframes ring { 0%, 60%, 100% { rotate: 0deg; } 65% { rotate: 14deg; } 75% { rotate: -12deg; } 85% { rotate: 8deg; } 92% { rotate: -4deg; } }
+  @keyframes rock { 0%, 100% { rotate: -12deg; } 50% { rotate: 12deg; } }
+  @keyframes press { 0%, 70%, 100% { translate: 0 0; opacity: 1; } 80% { translate: 0 1.5px; opacity: 0.4; } }
+  .card b { font-weight: 600; }
+  .card p { margin: 0; font-size: var(--text-sm); color: var(--prose); }
+  .card.lift { background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: 0 24px 50px -20px var(--accent-glow); }
+  .card.lift .ic { background: rgb(255 255 255 / 0.18); color: inherit; }
+  .card.lift b, .card.lift p { color: inherit; }
+  .card.lift p { opacity: 0.88; }
+  @media (max-width: 900px) { .deck { grid-template-columns: repeat(2, 1fr); } .card { rotate: 0deg !important; translate: none !important; } }
+  @media (max-width: 480px) { .deck { grid-template-columns: minmax(0, 1fr); } }
+
+  /* ---------- build from source ---------- */
+  .build { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); align-items: center; gap: clamp(2rem, 5vw, 5rem); }
+  .build .lead { margin: 1rem 0 0; max-width: 30rem; font-size: 1.0625rem; color: var(--prose); }
+  .build .cta { justify-content: flex-start; margin-top: 1.5rem; }
+  /* min-width 0: as a grid item it would otherwise stretch the column to the unbreakable clone line. */
+  .build .code { min-width: 0; }
+  @media (max-width: 900px) { .build { grid-template-columns: minmax(0, 1fr); } }
+
+  /* ---------- finale: centred, lit from below ---------- */
+  .finale { position: relative; isolation: isolate; text-align: center; padding-block: clamp(5rem, 10vw, 8rem); }
+  .finale::before { content: ""; position: absolute; inset: auto 0 0; z-index: -1; height: 22rem; pointer-events: none; background: radial-gradient(50% 70% at 50% 100%, var(--accent-glow), transparent 70%); }
+  .finale h2 { font-size: clamp(2.2rem, 1.3rem + 3.4vw, 4rem); max-width: 18ch; margin-inline: auto; }
+  .finale .lead { max-width: 34rem; margin: 1rem auto 0; font-size: 1.125rem; color: var(--prose); }
 </style>
 </head>
 <body>
 <a class="skip" href="#content">Skip to content</a>
-<header class="nav">
-  <a class="brand" href="./" aria-label="Aira home"><img src="icon.svg" width="28" height="28" alt=""><span>Aira</span></a>
-  <nav class="links" aria-label="Site">
-    <a href="features.html">Features</a>
-    <a href="guide.html">Guide</a>
-    <a href="feedback.html">Feedback</a>
-  </nav>
-  <a class="gh" href="https://github.com/DawnImpulse/aira" aria-label="Aira on GitHub">
-    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-  </a>
-  <a class="btn primary small" href="https://github.com/DawnImpulse/aira/releases/latest" data-download>Download for Mac</a>
-</header>
+<nav class="nav" aria-label="Site">
+  <div class="pill">
+    <a class="brand" href="./" aria-label="Aira home"><img src="icon.svg" width="28" height="28" alt=""><span>Aira</span></a>
+    <div class="links">
+      <a href="features.html">Features</a>
+      <a href="guide.html">Guide</a>
+      <a href="feedback.html">Feedback</a>
+    </div>
+    <div class="end">
+      <a class="gh" href="https://github.com/DawnImpulse/aira" aria-label="Aira on GitHub">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      </a>
+      <a class="btn primary small" href="https://github.com/DawnImpulse/aira/releases/latest" data-download>Download for Mac</a>
+    </div>
+  </div>
+</nav>
 
 <main id="content">
-  <section class="stage" aria-labelledby="hero-h">
-    <div class="beams" aria-hidden="true">
-      <i style="--i:0;--h:210;--x:2%;--w:13vmax"></i>
-      <i style="--i:1;--h:15;--x:22%;--w:8vmax"></i>
-      <i style="--i:2;--h:180;--x:38%;--w:17vmax"></i>
-      <i style="--i:3;--h:285;--x:60%;--w:9vmax"></i>
-      <i style="--i:4;--h:330;--x:76%;--w:12vmax"></i>
-    </div>
-    <div class="stage-copy">
-      <h1 id="hero-h"><span>All your projects,</span> <span>running at once.</span></h1>
-      <p class="lede">Aira “aye-ra” is a Mac code editor for people who keep many projects open at once. Dev servers, coding agents and git for every project, side by side in one window.</p>
+  <section class="hero" aria-labelledby="hero-h">
+    <div class="blobs" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="wrap">
+      <h1 id="hero-h"><span class="ac">All your projects,</span> running at once.</h1>
+      <p class="lede">Aira (aye-ra) is a Mac code editor for people who keep many projects open at once. Dev servers, coding agents and git for every project, side by side in one window.</p>
       <div class="cta">
         <a class="btn primary" href="https://github.com/DawnImpulse/aira/releases/latest" data-download>Download for Mac</a>
         <a class="btn" href="features.html">See every feature</a>
       </div>
-      <p class="note">macOS · open source, MIT · <span data-latest>early preview</span></p>
+      <p class="note">macOS · open source, MIT · <span data-latest>v0.5.2</span></p>
+    </div>
+
+    <div class="stage">
+      <figure class="pane" aria-label="The main pane of Aira, cycling through its open tabs: Claude Code at work, the browser in device view, a shell running a build, the editor">
+        <video class="pane-shot on" src="media/pane-claude.mp4" poster="screenshots/pane-claude.webp" width="1150" height="810" muted playsinline preload="auto" aria-label="The storefront · Claude Code tab: the transcript streams in as Claude Code reads the checkout flow, edits pricing.ts and writes tests."></video>
+        <video class="pane-shot" src="media/pane-browser.mp4" poster="screenshots/pane-browser.webp" width="1150" height="810" muted playsinline preload="auto" aria-label="The browser tab: the Harbor Goods dev server on a phone, a tablet and a laptop at once, scrolling together."></video>
+        <video class="pane-shot" src="media/pane-terminal.mp4" poster="screenshots/pane-terminal.webp" width="1150" height="810" muted playsinline preload="auto" aria-label="A shell tab: bun run build typed at the prompt, then the bundle output."></video>
+        <video class="pane-shot" src="media/pane-editor.mp4" poster="screenshots/pane-editor.webp" width="1150" height="810" muted playsinline preload="auto" aria-label="The pricing.ts tab: a line typed at the end of the file in the editor."></video>
+      </figure>
+
+      <div class="float spaces" role="img" aria-label="The storefront project's spaces in the sidebar: storefront with Claude Code working and three subagents, checkout-v2 with Gemini CLI done, and ui-kit.">
+        <div class="proj">storefront</div>
+        <div class="sc on working">
+          <div class="t">storefront <i class="live"></i><span class="star">★</span></div>
+          <div class="s"><span>2 of 2 Git Repos</span><em>8 changed</em></div>
+          <div class="a"><i class="spin g"></i><span class="w">Working</span> – Claude Code<span class="age">now</span></div>
+          <div class="a sub"><i class="spin"></i><b>Explore</b> · Find coupon call sit…<span class="age">now</span></div>
+          <div class="a sub deep"><i class="spin"></i><b>general-purpose</b> · Read c…<span class="age">now</span></div>
+          <div class="a sub"><i class="spin"></i><b>test-writer</b> · Write pricing te…<span class="age">now</span></div>
+        </div>
+        <div class="sc done">
+          <div class="t">checkout-v2<span class="star">★</span></div>
+          <div class="s"><span>⑂ feat/checkout-v2 ↑4 ↓1</span><em>2 changed</em></div>
+          <div class="a"><i class="ico gemini">▸</i><span class="d">Done</span> – Gemini CLI<span class="age">now</span></div>
+        </div>
+        <div class="sc">
+          <div class="t">ui-kit <i class="live"></i><span class="star off">☆</span></div>
+          <div class="s"><span>⑂ main</span><em>2 changed</em></div>
+        </div>
+      </div>
+      <div class="float git"><img src="screenshots/pane-git.webp" width="644" height="1620" alt="The Git panel: changes from storefront and ui-kit in one tree, and a generated commit message ready to commit." loading="lazy"></div>
+      <div class="float ports"><img src="screenshots/ports.webp" width="920" height="636" alt="The ports list grouped by project, with a button to free each one." loading="lazy"></div>
+    </div>
+
+    <div class="cells">
+      <div><span class="label">Platform</span><b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.37 12.73c-.02-2.4 1.96-3.55 2.05-3.6-1.12-1.63-2.85-1.86-3.46-1.88-1.47-.15-2.87.87-3.62.87-.75 0-1.9-.85-3.12-.83-1.6.02-3.08.93-3.9 2.37-1.67 2.89-.43 7.17 1.2 9.52.79 1.15 1.74 2.44 2.98 2.4 1.2-.05 1.65-.78 3.1-.78 1.45 0 1.86.78 3.12.75 1.29-.02 2.1-1.17 2.89-2.33.91-1.33 1.28-2.62 1.3-2.69-.03-.01-2.5-.96-2.54-3.8zM14 5.7c.66-.8 1.1-1.9.98-3.01-.95.04-2.1.63-2.78 1.43-.61.7-1.14 1.83-1 2.91 1.06.08 2.14-.54 2.8-1.33z"/></svg>macOS</b></div>
+      <div><span class="label">License</span><b>MIT (Open Source)</b></div>
+      <div><span class="label">Version</span><b>Preview <span data-latest>v0.5.2</span></b></div>
+      <div><span class="label">Price</span><b><i class="dot"></i>Free</b></div>
     </div>
   </section>
 
-  <div class="window-shot">
-    <figure class="clip">
-      <!-- Low priority: the still stays hidden until its 1.2s reveal, so it mustn't compete with the fonts (mobile LCP). -->
-      <img src="media/hero.webp" alt="" width="1920" height="1200" fetchpriority="low">
-      <video src="media/hero.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
-      <button class="clip-btn" type="button" data-name="intro" hidden>
-        <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
-        <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
-      </button>
-      <figcaption class="sr-only">Recording: Aira with three projects open. Claude Code is working in storefront with three subagents and the dev scripts are running. The checkout-v2 space shows Gemini CLI done; back in storefront, the Git tab lists changes from three repositories, and the ports list shows the ports each project holds.</figcaption>
-    </figure>
-  </div>
-
-  <section id="features" class="section wrap" aria-labelledby="features-h">
-    <div class="section-head">
-      <h2 id="features-h">Everything that's running, in plain sight.</h2>
-      <div>
-        <p>Every recording below is the real app, driven with demo projects. Each feature has its own colour, the way each project does in Aira.</p>
-        <a class="more" href="features.html">All features, explained<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8.6 2.6 7.2 4l3 3H2v2h8.2l-3 3 1.4 1.4L14 8z"/></svg></a>
+  <section class="section" id="agents" aria-labelledby="agents-h">
+    <div class="wrap">
+      <div class="section-head centered">
+        <p class="label">Works with the agents you already use</p>
+        <h2 id="agents-h">Aira starts the CLI you have installed, signed in as you.</h2>
       </div>
+      <ul class="agents-grid">
+        <li class="agent lead">
+          <img src="agents/claude.svg" alt="" width="40" height="40">
+          <div><b>Claude Code</b><span class="badge">Primary support</span><p>Exact status with no setup, subagents nested as they start, needs-input and done on the card, usage in the status bar. Everything Aira can show, it shows for Claude Code first.</p></div>
+          <small><i class="mark exact"></i>exact, subagents</small>
+        </li>
+        <li class="agent"><img src="agents/codex.svg" alt="" width="28" height="28"><b>Codex</b><small><i class="mark"></i>testing required</small></li>
+        <li class="agent"><img src="agents/gemini.svg" alt="" width="28" height="28"><b>Gemini CLI</b><small><i class="mark"></i>testing required</small></li>
+        <li class="agent"><img class="mono" src="agents/opencode.svg" alt="" width="28" height="28"><b>OpenCode</b><small><i class="mark"></i>testing required</small></li>
+        <li class="agent"><img class="mono" src="agents/cursor.svg" alt="" width="28" height="28"><b>Cursor Agent</b><small><i class="mark"></i>testing required</small></li>
+        <li class="agent"><img class="mono" src="agents/copilot.svg" alt="" width="28" height="28"><b>Copilot CLI</b><small><i class="mark"></i>testing required</small></li>
+        <li class="agent"><img src="agents/aider.png" alt="" width="28" height="28"><b>Aider</b><small><i class="mark"></i>testing required</small></li>
+        <li class="agent"><img src="agents/amp.svg" alt="" width="28" height="28"><b>Amp</b><small><i class="mark"></i>testing required</small></li>
+        <li class="agent"><img class="mono" src="agents/goose.svg" alt="" width="28" height="28"><b>Goose</b><small><i class="mark"></i>testing required</small></li>
+        <li class="agent"><img src="agents/qwen.svg" alt="" width="28" height="28"><b>Qwen Code</b><small><i class="mark"></i>testing required</small></li>
+        <li class="agent"><img src="agents/crush.png" alt="" width="28" height="28"><b>Crush</b><small><i class="mark"></i>testing required</small></li>
+        <li class="agent"><img src="agents/droid.svg" alt="" width="28" height="28"><b>Factory Droid</b><small><i class="mark"></i>testing required</small></li>
+        <li class="agent"><span class="prompt-ic" aria-hidden="true">&gt;_</span><b>Any other CLI</b><small>custom command</small></li>
+      </ul>
+      <ul class="legend" aria-label="How each agent is supported">
+        <li><i class="mark exact"></i>Primary support: exact status, subagents, no setup</li>
+        <li><i class="mark"></i>Testing required: starts and runs, status still being verified</li>
+      </ul>
+      <p class="legal">A custom command runs without status. Not affiliated with any of these projects; names and logos belong to their owners (<a href="https://github.com/DawnImpulse/aira/blob/main/src/assets/agents/NOTICE.md">logo notice</a>).</p>
     </div>
-    <div class="bento">
-      <article class="card wide" style="--h:15" aria-labelledby="f-agents">
-        <div class="copy">
-          <h3 id="f-agents"><i></i>Start an agent. See when it needs you.</h3>
-          <p>Pick Claude Code, Codex, Gemini CLI or one of nine others from the <b>+</b> in the tab bar and give it a task. Every space shows whether its agents are working, waiting for you or done, and Claude Code's subagents nest underneath as they start.</p>
-          <p>Look away and a finished agent's card keeps glowing until you come back.</p>
-        </div>
-        <figure class="clip">
-          <img src="media/agents.webp" alt="" width="1920" height="1200" loading="lazy">
-          <video src="media/agents.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
-          <button class="clip-btn" type="button" data-name="agents" hidden>
-            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
-            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
-          </button>
-          <figcaption class="sr-only">Recording: the plus button in the tab bar opens the agent menu and Claude Code is chosen. A task is typed into its session; the storefront card switches to Working, and as the session starts Explore, general-purpose and test-writer subagents, they appear one by one in a tree under it. Back in the editor, Claude Code asks a question: the card reads Needs input and the bell in the status bar lights up. Its notification opens the session, the answer goes in, and the card reads Working, then Done. In the checkout-v2 space, Gemini CLI shows Done.</figcaption>
-        </figure>
-      </article>
+  </section>
 
-      <article class="card" style="--h:210" aria-labelledby="f-spaces">
-        <div class="copy">
-          <h3 id="f-spaces"><i></i>Every space keeps its own window.</h3>
-          <p>A space is a folder you work in: the root, a nested package, a worktree. Switch, and its tabs and panels come back as you left them. Star the busy ones.</p>
-        </div>
-        <figure class="clip">
-          <img src="media/spaces.webp" alt="" width="1280" height="800" loading="lazy">
-          <video src="media/spaces.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
-          <button class="clip-btn" type="button" data-name="spaces" hidden>
-            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
-            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
-          </button>
-          <figcaption class="sr-only">Recording: clicking the checkout-v2 space shows its own tab, a Gemini CLI session. Its Sleep button stops the session and marks the space asleep, tabs kept. Clicking ui-kit shows an empty window. Starring ui-kit and opening the Spaces tab lists the starred spaces from every project.</figcaption>
-        </figure>
-      </article>
-
-      <article class="card" style="--h:180" aria-labelledby="f-scripts">
-        <div class="copy">
-          <h3 id="f-scripts"><i></i>Start the whole stack with one click.</h3>
-          <p>Pin the scripts you always run, then press Start next to them in the sidebar. They open together in the project's scripts window, and a failing one turns red and keeps its log.</p>
-        </div>
-        <figure class="clip">
-          <img src="media/scripts.webp" alt="" width="1280" height="800" loading="lazy">
-          <video src="media/scripts.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
-          <button class="clip-btn" type="button" data-name="scripts" hidden>
-            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
-            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
-          </button>
-          <figcaption class="sr-only">Recording: in the sidebar, the Start button next to storefront's pinned scripts is clicked. dev, storybook and db turn green and open as tabs in the scripts window while the Next.js dev server log streams in. Then Run on the test script: it fails, its tab turns red and the window reads 3 running, 1 failed.</figcaption>
-        </figure>
-      </article>
-
-      <article class="card" style="--h:285" aria-labelledby="f-git">
-        <div class="copy">
-          <h3 id="f-git"><i></i>Commit across every repo in the project.</h3>
-          <p>Nested repos and worktrees share one changes tree. Read the diff, let Generate draft the message, then commit, one repository at a time.</p>
-        </div>
-        <figure class="clip">
-          <img src="media/git.webp" alt="" width="1280" height="800" loading="lazy">
-          <video src="media/git.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
-          <button class="clip-btn" type="button" data-name="git" hidden>
-            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
-            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
-          </button>
-          <figcaption class="sr-only">Recording: the Git tab lists changes from three repositories. Clicking pricing.ts opens its diff against HEAD, Generate writes a commit message from the checked files, and Commit removes storefront's files from the list.</figcaption>
-        </figure>
-      </article>
-
-      <article class="card" style="--h:330" aria-labelledby="f-ports">
-        <div class="copy">
-          <h3 id="f-ports"><i></i>Find out what's sitting on a port.</h3>
-          <p>The status bar knows which script holds 3000. Search any port, see the process behind it, and free it in one click.</p>
-        </div>
-        <figure class="clip">
-          <img src="media/ports.webp" alt="" width="1280" height="800" loading="lazy">
-          <video src="media/ports.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
-          <button class="clip-btn" type="button" data-name="ports" hidden>
-            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
-            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
-          </button>
-          <figcaption class="sr-only">Recording: the ports button in the status bar opens the ports list. Typing 9090 finds a python3 process from the Downloads folder; freeing it leaves "No process of yours is listening on :9090".</figcaption>
-        </figure>
-      </article>
-
-      <article class="card wide" style="--h:130" aria-labelledby="f-browser">
-        <div class="copy">
-          <h3 id="f-browser"><i></i>Your dev server, on every screen at once.</h3>
-          <p>Open a running server from a new tab. Device view lays it out on a phone, a tablet and a laptop at their real widths, and scrolls them together.</p>
-          <p>Spot something off? Pick the element and send it, screenshot and all, to the agent in that space.</p>
-        </div>
-        <figure class="clip">
-          <img src="media/browser.webp" alt="" width="1920" height="1200" loading="lazy">
-          <video src="media/browser.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
-          <button class="clip-btn" type="button" data-name="browser" hidden>
-            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
-            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
-          </button>
-          <figcaption class="sr-only">Recording: the plus button's menu opens a new browser tab, which lists storefront's running dev servers. Opening dev shows the Harbor Goods shop. Device view puts it on an iPhone, an iPad and a laptop at once, each laid out for its width; with Sync on, scrolling the phone scrolls the others. Capture, Select Element, a click on a product card on the iPad, and Send to storefront · Claude Code pastes the card's selector and screenshot into the Claude Code session.</figcaption>
-        </figure>
-      </article>
-
-      <article class="card" style="--h:255" aria-labelledby="f-editor">
-        <div class="copy">
-          <h3 id="f-editor"><i></i>A light editor, dark or light.</h3>
-          <p>Monaco for code and diffs, a file tree with git colours, terminals with your login shell, and any font you have installed. Dark, light or follow macOS.</p>
-        </div>
-        <figure class="clip">
-          <img src="media/editor.webp" alt="" width="1280" height="800" loading="lazy">
-          <video src="media/editor.mp4" muted loop playsinline preload="none" aria-hidden="true"></video>
-          <button class="clip-btn" type="button" data-name="editor" hidden>
-            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>
-            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.3v11.4L13.5 8z"/></svg>
-          </button>
-          <figcaption class="sr-only">Recording: Settings opens on Appearance, with Coding agents, Notifications, Commit messages and Shortcuts in its side menu. The Notifications section shows the agent notification switch and a test banner button. Back on Appearance, choosing Light turns the whole window light, and closing Settings shows the editor and sidebar in the light theme.</figcaption>
-        </figure>
-      </article>
-
-      <article class="card rest" style="--h:345" aria-labelledby="f-rest">
-        <div class="copy">
-          <h3 id="f-rest"><i></i>And the rest.</h3>
-          <ul>
-            <li>Login-shell terminals, with memory per session</li>
-            <li>Commit messages from fifteen AI providers</li>
-            <li>Branches, worktrees, pull and push</li>
-            <li>Notifications when an agent needs you</li>
-            <li>Sleep a space to stop everything in it</li>
-            <li>Sign in with your browser's cookies</li>
-            <li>Keyboard shortcuts throughout</li>
+  <section class="section" aria-labelledby="start-h">
+    <div class="wrap">
+      <article class="split">
+        <div>
+          <p class="eyebrow">Agents · Claude Code first</p>
+          <h2 id="start-h">Start Claude Code. See when it needs you.</h2>
+          <p class="lead">Pick Claude Code from the + in the tab bar and give it a task. Every space shows whether it is working, waiting for you or done, with its subagents underneath. Codex, Gemini CLI and nine others start the same way; their status is still being verified.</p>
+          <ul class="pairs">
+            <li><i></i><div><b>Subagents nest underneath</b><span>Claude Code's helpers appear in a tree as they start.</span></div></li>
+            <li><i></i><div><b>Needs input, loud enough</b><span>A bell in the status bar and a banner when an agent asks.</span></div></li>
+            <li><i></i><div><b>Done stays lit</b><span>A finished agent's card keeps glowing until you come back.</span></div></li>
+            <li><i></i><div><b>Signed in as you</b><span>Aira runs the Claude Code you already installed. Nothing to configure.</span></div></li>
           </ul>
+          <a class="more" href="features.html#agents">How agents are tracked</a>
         </div>
-        <div class="rest-links">
-          <a class="btn" href="features.html">Features</a>
-          <a class="btn" href="guide.html">Guide</a>
+        <div class="split-media">
+          <div class="win"><img src="media/agents.webp" width="1920" height="1200" alt="Claude Code asks for input in the storefront space; Explore, general-purpose and test-writer subagents nest under it in the sidebar." loading="lazy"></div>
+          <div class="float"><img src="screenshots/agent-launcher.webp" width="600" height="1000" alt="The agent launcher menu listing twelve coding agents, then New terminal, New browser tab and Custom command." loading="lazy"></div>
         </div>
       </article>
     </div>
   </section>
 
-  <section id="agents" class="section wrap agents" aria-labelledby="agents-h">
-    <h2 id="agents-h">Works with the agents you already use.</h2>
-    <p>Aira starts the CLI you have installed, signed in as you. How much it can show depends on what each tool reports.</p>
-    <ul class="chips" role="list">
-      <li><span class="chip" style="--i:0;--c:#D97757"><img src="agents/claude.svg" alt="" width="22" height="22">Claude Code<i class="mark exact" aria-hidden="true"></i><span class="sr-only">: exact status and subagents, no setup</span></span></li>
-      <li><span class="chip" style="--i:1;--c:#7A9DFF"><img src="agents/codex.svg" alt="" width="22" height="22">Codex<i class="mark hook" aria-hidden="true"></i><span class="sr-only">: exact status with a hook file</span></span></li>
-      <li><span class="chip" style="--i:2;--c:#4796E3"><img src="agents/gemini.svg" alt="" width="22" height="22">Gemini CLI<i class="mark exact" aria-hidden="true"></i><span class="sr-only">: exact status, no setup</span></span></li>
-      <li><span class="chip" style="--i:3;--c:#A1A1AA"><span class="mask" style="--m:url(agents/opencode.svg)"></span>OpenCode<i class="mark exact" aria-hidden="true"></i><span class="sr-only">: exact status, no setup</span></span></li>
-      <li><span class="chip" style="--i:4;--c:#A1A1AA"><span class="mask" style="--m:url(agents/cursor.svg)"></span>Cursor Agent<i class="mark" aria-hidden="true"></i><span class="sr-only">: status from terminal activity</span></span></li>
-      <li><span class="chip" style="--i:1;--c:#A1A1AA"><span class="mask" style="--m:url(agents/copilot.svg)"></span>GitHub Copilot CLI<i class="mark hook" aria-hidden="true"></i><span class="sr-only">: exact status with a hook file</span></span></li>
-      <li><span class="chip" style="--i:2;--c:#14B014"><img src="agents/aider.png" alt="" width="22" height="22">Aider<i class="mark" aria-hidden="true"></i><span class="sr-only">: status from terminal activity</span></span></li>
-      <li><span class="chip" style="--i:3;--c:#F34E3F"><img src="agents/amp.svg" alt="" width="22" height="22">Amp<i class="mark" aria-hidden="true"></i><span class="sr-only">: status from terminal activity</span></span></li>
-      <li><span class="chip" style="--i:4;--c:#A1A1AA"><span class="mask" style="--m:url(agents/goose.svg)"></span>Goose<i class="mark hook" aria-hidden="true"></i><span class="sr-only">: exact status with a hook file</span></span></li>
-      <li><span class="chip" style="--i:2;--c:#615CED"><img src="agents/qwen.svg" alt="" width="22" height="22">Qwen Code<i class="mark exact" aria-hidden="true"></i><span class="sr-only">: exact status, no setup</span></span></li>
-      <li><span class="chip" style="--i:3;--c:#FF5FD2"><img src="agents/crush.png" alt="" width="22" height="22">Crush<i class="mark" aria-hidden="true"></i><span class="sr-only">: status from terminal activity</span></span></li>
-      <li><span class="chip" style="--i:4;--c:#EE6018"><img src="agents/droid.svg" alt="" width="22" height="22">Factory Droid<i class="mark hook" aria-hidden="true"></i><span class="sr-only">: exact status with a hook file</span></span></li>
-      <li><span class="chip any" style="--i:5"><span class="prompt" aria-hidden="true">&gt;_</span>Any other CLI<span class="sr-only">: runs as a custom command, without status</span></span></li>
-    </ul>
-    <ul class="legend" aria-hidden="true">
-      <li><i class="mark exact"></i>Exact status, no setup</li>
-      <li><i class="mark hook"></i>Exact status with a hook file you opt into</li>
-      <li><i class="mark"></i>Status from terminal activity</li>
-    </ul>
-    <p class="legal">Claude Code also shows its subagents as they start, and any other CLI runs as a custom command, without status. Not affiliated with any of these projects; names and logos belong to their owners (<a href="https://github.com/DawnImpulse/aira/blob/main/src/assets/agents/NOTICE.md">logo notice</a>).</p>
+  <section class="section" id="window" aria-labelledby="window-h">
+    <div class="wrap">
+      <div class="section-head centered">
+        <h2 id="window-h">One window for all of it.</h2>
+        <p>Every project you add brings its servers, agents, git and ports with it. Aira keeps them running side by side and shows what each one is doing.</p>
+      </div>
+      <div class="hub">
+        <ul class="hub-cards">
+          <li style="--c: 180"><span class="hi"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l5.5-3.5z"/></svg></span><div><b>Scripts</b><p>Pinned dev servers, started together, one tab each.</p></div></li>
+          <li style="--c: 285"><span class="hi"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="8" r="2.2"/><path d="M6 7.2v9.6M18 10.2c0 3.5-3 4.3-6 4.8-2.5.4-4.5 1-5.5 2"/></svg></span><div><b>Git</b><p>One changes tree across nested repos and worktrees.</p></div></li>
+        </ul>
+        <svg class="hub-wire" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0 25 H38 Q50 25 50 37 V50 H100"/>
+          <path d="M0 75 H38 Q50 75 50 63 V50"/>
+        </svg>
+        <div class="hub-tile"><img src="icon.svg" alt="" width="64" height="64"><small>Aira</small></div>
+        <svg class="hub-wire flip" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0 25 H38 Q50 25 50 37 V50 H100"/>
+          <path d="M0 75 H38 Q50 75 50 63 V50"/>
+        </svg>
+        <ul class="hub-cards">
+          <li style="--c: 15"><span class="hi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></svg></span><div><b>Agents</b><p>Working, needs input or done, per space.</p></div></li>
+          <li style="--c: 330"><span class="hi"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="9" width="14" height="9" rx="2"/><path d="M9 9V5M15 9V5M12 18v3"/></svg></span><div><b>Ports</b><p>Who holds 3000, and a button to free it.</p></div></li>
+        </ul>
+      </div>
+    </div>
   </section>
 
-  <section id="install" class="finale" aria-labelledby="install-h">
-    <div class="beams" aria-hidden="true">
-      <i style="--h:210;--x:0%;--w:12vmax"></i>
-      <i style="--h:15;--x:20%;--w:7vmax"></i>
-      <i style="--h:180;--x:40%;--w:15vmax"></i>
-      <i style="--h:285;--x:62%;--w:8vmax"></i>
-      <i style="--h:330;--x:80%;--w:11vmax"></i>
-    </div>
-    <div class="finale-copy">
-      <h2 id="install-h">Get it.</h2>
-      <p>Signed and notarized for macOS, Apple Silicon and Intel. The file name carries the version, so you always know which one you have.</p>
-      <div class="cta">
-        <a class="btn primary" href="https://github.com/DawnImpulse/aira/releases/latest" data-download>Download for Mac</a>
+  <section class="section" id="features" aria-labelledby="features-h">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 id="features-h">Everything that's running, in plain sight.</h2>
+        <p>Every screenshot is the real app with demo projects.</p>
       </div>
-      <p class="note"><span data-latest>Latest release</span> · open source, MIT</p>
-      <p>Or build it yourself. You need <a href="https://bun.sh">Bun</a>, <a href="https://rustup.rs">Rust</a> and the Xcode Command Line Tools.</p>
+      <div class="bento">
+        <article class="tile accent span5">
+          <h3>Every space keeps its own window.</h3>
+          <p>A space is a folder you work in: the root, a nested package, a worktree. Switch, and its tabs and panels come back as you left them. Star the busy ones.</p>
+          <div class="pic small"><img src="screenshots/spaces-sidebar.webp" width="574" height="734" alt="The Spaces tab listing starred spaces from every project, each with its agents and branch." loading="lazy"></div>
+        </article>
+        <div class="stack span7">
+          <article class="tile">
+            <h3>Commit across every repo in the project.</h3>
+            <p>Nested repos and worktrees share one changes tree. Read the diff, then commit, one repository at a time.</p>
+            <div class="pic git-crop"><img src="screenshots/pane-git.webp" width="644" height="1620" alt="The Git panel: changes from the storefront and ui-kit repositories in one tree." loading="lazy"></div>
+          </article>
+          <article class="tile">
+            <h3>Generate drafts the message.</h3>
+            <p>From the checked files, with the provider you choose. Nothing is sent until you press it.</p>
+            <!-- Generate, live: the button spins, the message types in, Commit lights up. Looped by site.js. -->
+            <div class="gen" aria-label="Generate writes the commit message from the checked files" role="img">
+              <div class="gen-row"><span>Commit to <i class="sq"></i><b>storefront</b> · 6 files</span><button type="button" class="gen-btn" tabindex="-1"><i class="spin"></i><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1l1.6 4.4L14 7l-4.4 1.6L8 13l-1.6-4.4L2 7l4.4-1.6zM13 11l.6 1.4 1.4.6-1.4.6L13 15l-.6-1.4-1.4-.6 1.4-.6z"/></svg>Generate</button></div>
+              <pre class="gen-msg"><span class="typed"></span><span class="caret"></span></pre>
+              <div class="gen-row"><button type="button" class="gen-commit" tabindex="-1">✓ Commit</button><button type="button" class="gen-ghost" tabindex="-1">Commit and Push</button></div>
+            </div>
+          </article>
+        </div>
+        <article class="tile span7">
+          <h3>Your dev server, on every screen at once.</h3>
+          <p>Device view lays a running server out on a phone, a tablet and a laptop at their real widths, and scrolls them together. Pick an element and send it, screenshot and all, to the agent in that space.</p>
+          <div class="pic"><img src="screenshots/browser-work.webp" width="2300" height="1620" alt="The browser tab in device view: the Harbor Goods shop on an iPhone, an iPad and a laptop at once; a product card on the iPad is picked and the menu offers Send to storefront · Claude Code." loading="lazy"></div>
+        </article>
+        <article class="tile panel span5">
+          <h3>Start the whole stack with one click.</h3>
+          <p>Pin the scripts you always run, then press Start. A failing one turns red and keeps its log.</p>
+          <div class="pic small"><img src="screenshots/scripts-sidebar.webp" width="574" height="708" alt="storefront's scripts in the sidebar: dev, storybook and db running and pinned, test failed." loading="lazy"></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="rest-h">
+    <div class="wrap">
+      <div class="section-head centered"><h2 id="rest-h">And the rest.</h2></div>
+      <ul class="deck">
+        <li class="card"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-5-6-5"/><path class="cursor" d="M12 19h8"/></svg></span><b>Terminals</b><p>Your login shell, with memory per session.</p></li>
+        <li class="card lift"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="sun" d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/><circle cx="12" cy="12" r="4"/></svg></span><b>Dark or light</b><p>Monaco, any installed font, follow macOS or pick.</p></li>
+        <li class="card"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><g class="bell"><path d="M6 17V11a6 6 0 0 1 12 0v6l2 2H4z"/><path d="M10 21h4"/></g></svg></span><b>Notifications</b><p>A banner and a bell when an agent needs you.</p></li>
+        <li class="card"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="moon" d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></span><b>Sleep</b><p>Stop everything in a space, keep its tabs.</p></li>
+        <li class="card"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><g><path class="key" d="M7 10h.01"/><path class="key" d="M11 10h.01"/><path class="key" d="M15 10h.01"/><path class="key" d="M7 14h10"/></g></svg></span><b>Keyboard</b><p>Shortcuts throughout. <a href="guide.html#shortcuts">The Guide lists them.</a></p></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" id="build" aria-labelledby="build-h">
+    <div class="wrap build">
+      <div>
+        <p class="eyebrow">Open source</p>
+        <h2 id="build-h">Or build it yourself.</h2>
+        <p class="lead">Aira is MIT licensed. Clone it, run it in development, or build the app locally. Agents aren't bundled: install the CLIs you use and Aira finds them on your PATH.</p>
+        <div class="cta">
+          <a class="btn" href="https://github.com/DawnImpulse/aira">View on GitHub</a>
+          <a class="more" href="guide.html">Read the guide</a>
+        </div>
+      </div>
       <div class="code">
         <div class="code-bar">
           <span>Terminal</span>
@@ -412,23 +524,39 @@
         <pre tabindex="0" aria-label="Commands to build Aira"><code><span class="prompt">$ </span>git clone https://github.com/DawnImpulse/aira.git
 <span class="prompt">$ </span>cd aira
 <span class="prompt">$ </span>bun install
-<span class="prompt">$ </span>bun tauri dev</code></pre>
+<span class="prompt">$ </span>bun tauri dev
+<span class="prompt">$ </span>bun tauri build   <span class="c"># Aira.app in src-tauri/target/release/bundle/macos</span></code></pre>
         <p class="sr-only" role="status"></p>
       </div>
-      <p class="after"><code>bun tauri build</code> makes <code>Aira.app</code> in <code><span class="nowrap">src-tauri</span>/<wbr>target/<wbr>release/<wbr>bundle/<wbr>macos</code>. Agents aren't bundled: install the CLIs you use and Aira finds them on your PATH.</p>
+    </div>
+  </section>
+
+  <section class="finale" aria-labelledby="finale-h">
+    <div class="wrap">
+      <h2 id="finale-h">Open everything. Keep it running.</h2>
+      <p class="lead">Early preview. Download, add a project, and start an agent.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/DawnImpulse/aira/releases/latest" data-download>Download for Mac</a>
+        <a class="btn" href="#build">Build from source</a>
+      </div>
+      <p class="note">macOS · open source, MIT · <span data-latest>v0.5.2</span></p>
     </div>
   </section>
 </main>
 
-<footer class="foot wrap">
-  <a class="brand" href="./"><img src="icon.svg" width="24" height="24" alt="">Aira</a>
-  <nav aria-label="Footer">
-    <a href="features.html">Features</a>
-    <a href="guide.html">Guide</a>
-    <a href="feedback.html">Feedback</a>
-    <a href="https://github.com/DawnImpulse/aira">GitHub</a>
-  </nav>
-  <p>Open source under the <a href="https://github.com/DawnImpulse/aira/blob/main/LICENSE">MIT license</a>. Built with Tauri, React, Monaco and xterm.js. Screenshots and recordings show demo projects.</p>
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div>
+        <a class="brand" href="./"><img src="icon.svg" width="28" height="28" alt="">Aira</a>
+        <p>A Mac code editor that keeps every open project's servers, agents, git and a multi-device browser running side by side.</p>
+      </div>
+      <div><p class="label">Product</p><ul><li><a href="features.html">Features</a></li><li><a href="guide.html">Guide</a></li><li><a href="feedback.html">Feedback</a></li><li><a href="https://github.com/DawnImpulse/aira/releases/latest" data-download>Download for Mac</a></li></ul></div>
+      <div><p class="label">Source</p><ul><li><a href="https://github.com/DawnImpulse/aira">GitHub</a></li><li><a href="https://github.com/DawnImpulse/aira/releases">Releases</a></li><li><a href="https://github.com/DawnImpulse/aira/blob/main/LICENSE">MIT license</a></li><li><a href="https://github.com/DawnImpulse/aira/blob/main/src/assets/agents/NOTICE.md">Logo notice</a></li></ul></div>
+      <div><p class="label">Built with</p><ul><li>Tauri</li><li>React</li><li>Monaco</li><li>xterm.js</li></ul></div>
+    </div>
+    <div class="fine"><span>© 2026 Saksham · MIT license</span><span>Screenshots show demo projects.</span></div>
+  </div>
 </footer>
 </body>
 </html>

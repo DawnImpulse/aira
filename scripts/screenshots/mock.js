@@ -299,6 +299,16 @@ export const formatPrice = (cents: number, currency = "USD") =>
         return popupMenu(menus[a.rid]);
       case "ai_list_models":
         return ["claude-haiku-4-5", "claude-sonnet-5", "claude-opus-5-5"];
+      case "claude_usage": {
+        const resets_at = new Date(Date.now() + 2.5 * 86400e3).toISOString();
+        return {
+          seven_day: { utilization: 18, resets_at },
+          limits: [
+            { kind: "weekly_all", percent: 18, severity: "normal", resets_at, scope: null },
+            { kind: "weekly_scoped", percent: 25, severity: "normal", resets_at, scope: { model: { display_name: "Fable" } } },
+          ],
+        };
+      }
       case "git_last_message":
         return "feat(cart): free shipping over $50";
       case "git_discover":
@@ -336,7 +346,11 @@ export const formatPrice = (cents: number, currency = "USD") =>
         return null;
       }
       case "pty_kill":
-        setTimeout(() => window.__ptys[a.id]?.send({ exit: 130 }), 30);
+        // Exit, then forget the session so ports_list stops attributing its port to it (freeing a script's port).
+        setTimeout(() => {
+          window.__ptys[a.id]?.send({ exit: 130 });
+          delete window.__ptys[a.id];
+        }, 30);
         return null;
       case "git_branches":
         return { local: [{ name: "main", upstream: "origin/main", track: "", current: true }, { name: "feat/checkout-v2", upstream: "origin/feat/checkout-v2", track: "", current: false }], remote: ["origin/main", "origin/feat/checkout-v2"] };
