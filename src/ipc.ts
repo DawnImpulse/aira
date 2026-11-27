@@ -291,6 +291,12 @@ export const api = {
   aiListModels: (cfg: AiCfg) => invoke<string[]>("ai_list_models", { cfg }),
   claudeUsage: () => invoke<ClaudeUsage>("claude_usage"),
 
+  // Phone companion (lib/phone): pairings as JSON in the Keychain; a loopback listener the email sign-in link lands on.
+  phoneLoad: () => invoke<string>("phone_load"),
+  phoneSave: (json: string) => invoke("phone_save", { json }),
+  /** Returns the port; the full URL the browser hits arrives as the `phone-login-url` event. */
+  phoneLoginListen: () => invoke<number>("phone_login_listen"),
+
   // Embedded browser: a native child webview the frontend positions over the Browser tab's body.
   // Ids: the tab id, or `<tabId>/<device>` for device-view panes.
   browserOpen: (a: { id: string; url: string; x: number; y: number; w: number; h: number; userAgent?: string; zoom?: number }) =>

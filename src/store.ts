@@ -9,6 +9,7 @@ import { disposeModel, reloadIfClean, setEditorTheme } from "./lib/monaco";
 import { attachInherited, busyTerms, confirmKill, confirmScriptClose, newTerminal, readHandoff, removeTerm, runningList, setTerminalTheme, sleepTerm, startSession, stop as stopTerm, writeHandoff } from "./lib/terminals";
 import { nextIdentity } from "./lib/identity";
 import { AGENTS } from "./lib/agents";
+import { initPhone } from "./lib/phone";
 import { checkForUpdates, scheduleUpdateChecks, type UpdateState } from "./lib/updates";
 
 export interface Term extends TermSnapshot {
@@ -1078,6 +1079,7 @@ export async function boot() {
     if (e.payload.procs) detectAgents(e.payload.procs);
   });
   listen<string>("menu", (e) => onMenu(e.payload));
+  initPhone();
   listen("quit-requested", () => quitApp());
   listen<string>("notification-clicked", (e) => e.payload && focusTerminal(e.payload)); // no key: the Settings test banner
   listen<string>("browser:docked", (e) => set((s) => ({ popped: omit(s.popped, e.payload) })));

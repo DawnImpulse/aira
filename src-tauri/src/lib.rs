@@ -5,6 +5,7 @@ mod env;
 mod fs;
 mod git;
 mod mem;
+mod phone;
 mod ports;
 mod pty;
 
@@ -190,6 +191,9 @@ pub fn run() {
             ai::ai_commit_message,
             ai::ai_list_models,
             ai::claude_usage,
+            phone::phone_load,
+            phone::phone_save,
+            phone::phone_login_listen,
             agent::agent_events,
             agent::agent_events_clear,
             agent::agent_usage,

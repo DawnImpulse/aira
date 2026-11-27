@@ -7,6 +7,7 @@ import { AGENTS, availableAgents, hasBinary } from "../lib/agents";
 import { SHORTCUTS } from "../lib/shortcuts";
 import { checkForUpdates, dismissUpdate, installUpdate, lastChecked, restartForUpdate } from "../lib/updates";
 import { UpdateProgress } from "./UpdateStatus";
+import { PhoneSettings } from "./PhoneSettings";
 import { AgentIcon, cx, Icon, Modal, useNow } from "./ui";
 
 // Fallbacks if the installed-font lookup fails (non-macOS or CoreText error).
@@ -17,6 +18,7 @@ const SECTIONS = [
   { id: "appearance", label: "Appearance", icon: "palette" },
   { id: "agents", label: "Coding agents", icon: "smart_toy" },
   { id: "notifications", label: "Notifications", icon: "notifications" },
+  { id: "phone", label: "Phone", icon: "smartphone" },
   { id: "ai", label: "Commit messages", icon: "auto_awesome" },
   { id: "shortcuts", label: "Shortcuts", icon: "keyboard" },
   { id: "updates", label: "Updates", icon: "system_update_alt" },
@@ -276,6 +278,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           {section === "appearance" && appearance}
           {section === "agents" && agents}
           {section === "notifications" && notifications}
+          {section === "phone" && <PhoneSettings />}
           {section === "ai" && ai}
           {section === "updates" && <Updates version={version} />}
           {section === "shortcuts" && (

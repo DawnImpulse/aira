@@ -10,6 +10,7 @@ import "@xterm/xterm/css/xterm.css";
 import { api, type HookEvent, type Project, type PtyMessage, type Script, type Settings } from "../ipc";
 import { dropTab, notify, openTerminalTab, projectById, scriptCwd, scriptsWindow, spaceOfPath, uid, updateConfig, useStore, type AgentStatus, type Term } from "../store";
 import { agentById, type Agent } from "./agents";
+import { phoneWake } from "./phone";
 import { openLink, popupMenu } from "./menu";
 import { ask, choose } from "./dialog";
 import { emptyTree, fold, normalize, type AgentEvent, type TreeState } from "./agentEvents";
@@ -67,6 +68,34 @@ const isInterrupt = (d: string) => d === "\x03" || d === "\x1b" || /^\x1b\[(27|9
 const xts = new Map<string, XT>();
 let theme = DARK;
 let lastSize = { cols: 120, rows: 32 };
+
+// ---------- phone companion taps (lib/phone) ----------
+
+/** Raw output, exit and resize of every terminal; lib/phone replaces these to mirror a terminal to a phone. */
+export const taps = {
+  start: (_key: string) => {},
+  out: (_key: string, _bytes: Uint8Array) => {},
+  exit: (_key: string, _code: number) => {},
+  resize: (_key: string, _cols: number, _rows: number) => {},
+};
+export const termSize = (key: string) => {
+  const t = xts.get(key)?.term;
+  return t ? { cols: t.cols, rows: t.rows } : lastSize;
+};
+/** Types into a terminal as if at its keyboard: same path as local input (heuristics, ptyWrite). */
+export const termInput = (key: string, data: string) => xts.get(key)?.term.input(data);
+/** The terminal's screen and recent scrollback as escape sequences, so a late viewer starts in sync. */
+export function termScreen(key: string, scrollback = 300): string {
+  const x = xts.get(key);
+  if (!x) return "";
+  const s = new SerializeAddon();
+  x.term.loadAddon(s);
+  try {
+    return s.serialize({ scrollback });
+  } finally {
+    s.dispose();
+  }
+}
 const fontFamily = (s: Settings) => `"${s.monoFont}", "SF Mono", Menlo, monospace`;
 
 export function setTerminalTheme(dark: boolean, s: Settings) {
@@ -172,6 +201,7 @@ function xterm(key: string): XT {
   });
   term.onResize(({ cols, rows }) => {
     lastResize.set(key, Date.now()); // the redraw that follows is not "work" (see the heuristic)
+    taps.resize(key, cols, rows);
     const id = live();
     if (id) api.ptyResize(id, cols, rows).catch(() => {});
   });
@@ -294,6 +324,7 @@ export async function startSession(key: string) {
   const sessionId = uid();
   const now = Date.now();
   setTerm(key, { sessionId, status: "running", startedAt: now, endedAt: undefined, exitCode: undefined, stopped: false });
+  taps.start(key);
   const scriptId = t.scriptId;
   if (scriptId)
     updateConfig((c) => {
@@ -315,6 +346,7 @@ function channelFor(key: string, sessionId: string, x: XT) {
     if (msg instanceof ArrayBuffer) {
       lastOut.set(key, Date.now());
       const bytes = new Uint8Array(msg);
+      taps.out(key, bytes);
       x.term.write(bytes, () => {
         unacked += bytes.length;
         if (unacked >= ACK_EVERY) {
@@ -398,6 +430,7 @@ function onExit(key: string, sessionId: string, code: number) {
   if (!t.scriptId && !t.command && !sleeping.delete(key)) return removeTerm(key, true);
   if (t.agent && t.status !== "stopping") notifyAgent(key, code === 0 ? "Exited" : `Exited with code ${code}`);
   const stopped = t.status === "stopping";
+  taps.exit(key, code);
   xts.get(key)?.kitty.splice(0, Infinity, 0);
   xts.get(key)?.term.write(`\r\n\x1b[2m[${stopped ? "stopped" : `process exited with code ${code}`}]\x1b[0m\r\n`);
   setTerm(key, { status: "exited", exitCode: code, endedAt: Date.now(), stopped });
@@ -627,6 +660,7 @@ function notifyAgent(key: string, what: string) {
   // Space as the title, the terminal (unique per terminal, numbered) and state as the body.
   const title = spaceOfPath(t.cwd)?.name ?? projectById(t.projectId)?.name ?? t.name;
   const body = `${t.name} : ${what}`.toLowerCase();
+  if (what === "Waiting Input") phoneWake(key, title, body);
   api.notifyAgent(key, title, body).catch(() => {}); // resolves on click/clear, so never awaited
   useStore.setState((s) => ({
     notices: [{ key, title, body, at: now }, ...s.notices].slice(0, 50),
