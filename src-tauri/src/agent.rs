@@ -184,12 +184,83 @@ pub struct Usage {
 /// Claude wrote, but only transcripts under ~/.claude are readable here.
 #[tauri::command]
 pub async fn agent_usage(app: AppHandle, path: String) -> Result<Vec<Usage>, String> {
+    let p = transcript_path(&app, path)?;
+    tauri::async_runtime::spawn_blocking(move || read_usage(&p)).await.map_err(err)?
+}
+
+/// Only transcripts under ~/.claude are readable here; the path comes from a hook payload Claude wrote.
+fn transcript_path(app: &AppHandle, path: String) -> Result<PathBuf, String> {
     let home = app.path().home_dir().map_err(err)?;
     let p = PathBuf::from(path);
     if !p.starts_with(home.join(".claude")) || !p.extension().is_some_and(|x| x == "jsonl") {
         return Err("not a Claude transcript".into());
     }
-    tauri::async_runtime::spawn_blocking(move || read_usage(&p)).await.map_err(err)?
+    Ok(p)
+}
+
+#[derive(serde::Serialize)]
+pub struct TranscriptTail {
+    /// `user` and `assistant` lines only, trimmed to what the conversation view renders.
+    pub lines: Vec<Value>,
+    /// Byte offset after the last complete line; pass it back to read what came after.
+    pub offset: u64,
+}
+
+/// The transcript's conversation lines from `offset` on (plan 016, phone conversation view). A trailing
+/// partial line (still being written) is left for the next call.
+#[tauri::command]
+pub async fn agent_transcript(app: AppHandle, path: String, offset: u64) -> Result<TranscriptTail, String> {
+    let p = transcript_path(&app, path)?;
+    tauri::async_runtime::spawn_blocking(move || read_tail(&p, offset)).await.map_err(err)?
+}
+
+/// Truncates every string inside a content value (blocks, nested results) to `max` chars.
+fn cap_strings(v: &mut Value, max: usize) {
+    match v {
+        Value::String(s) if s.chars().count() > max => *s = s.chars().take(max).collect(),
+        Value::Array(a) => a.iter_mut().for_each(|x| cap_strings(x, max)),
+        Value::Object(o) => o.values_mut().for_each(|x| cap_strings(x, max)),
+        _ => {}
+    }
+}
+
+fn read_tail(path: &Path, mut offset: u64) -> Result<TranscriptTail, String> {
+    use std::io::{BufRead, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path).map_err(err)?;
+    let len = f.metadata().map_err(err)?.len();
+    if offset > len {
+        offset = 0; // the file was replaced or truncated: start over
+    }
+    f.seek(SeekFrom::Start(offset)).map_err(err)?;
+    let mut r = std::io::BufReader::new(f);
+    let mut lines = Vec::new();
+    let mut buf = String::new();
+    loop {
+        buf.clear();
+        let n = r.read_line(&mut buf).map_err(err)?;
+        if n == 0 || !buf.ends_with('\n') {
+            break;
+        }
+        offset += n as u64;
+        if !(buf.contains("\"type\":\"user\"") || buf.contains("\"type\":\"assistant\"")) {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<Value>(&buf) else { continue };
+        let t = v["type"].as_str().unwrap_or("");
+        if t != "user" && t != "assistant" {
+            continue;
+        }
+        let mut content = v["message"]["content"].clone();
+        cap_strings(&mut content, 4096); // the view keeps ~2 KB of a tool result; don't ship megabytes over IPC
+        lines.push(json!({
+            "type": t,
+            "uuid": v["uuid"],
+            "timestamp": v["timestamp"],
+            "isMeta": v["isMeta"],
+            "content": content,
+        }));
+    }
+    Ok(TranscriptTail { lines, offset })
 }
 
 /// One transcript line per content block repeats the message's usage, so the last line per message id wins.
@@ -247,6 +318,34 @@ mod tests {
         assert_eq!((opus.input, opus.output, opus.cache_read, opus.cache_create), (5, 150, 20, 10));
         let haiku = rows.iter().find(|r| r.model == "claude-haiku-4-5").unwrap();
         assert_eq!((haiku.input, haiku.output), (7, 1));
+    }
+
+    #[test]
+    fn tail_returns_conversation_lines_and_leaves_a_partial_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("s.jsonl");
+        let full = concat!(
+            r#"{"type":"user","uuid":"u1","timestamp":"t","message":{"role":"user","content":"hi"}}"#, "\n",
+            r#"{"type":"mode","mode":"x"}"#, "\n",
+            r#"{"type":"assistant","uuid":"a1","timestamp":"t","message":{"content":[{"type":"text","text":"yo"}]}}"#, "\n",
+            r#"{"type":"user","uuid":"u2","mess"#
+        );
+        std::fs::write(&p, full).unwrap();
+        let t = read_tail(&p, 0).unwrap();
+        assert_eq!(t.lines.len(), 2);
+        let mut big = json!([{ "type": "tool_result", "content": "x".repeat(5000) }, "y"]);
+        cap_strings(&mut big, 4096);
+        assert_eq!(big[0]["content"].as_str().unwrap().len(), 4096);
+        assert_eq!(big[1], "y");
+        assert_eq!(t.lines[0]["uuid"], "u1");
+        assert_eq!(t.lines[1]["content"][0]["text"], "yo");
+        let partial = r#"{"type":"user","uuid":"u2","mess"#.len() as u64;
+        assert_eq!(t.offset, full.len() as u64 - partial);
+        // the rest of the line lands: picked up from the saved offset
+        std::fs::write(&p, format!(r#"{full}age":{{"content":"more"}}}}"#) + "\n").unwrap();
+        let t2 = read_tail(&p, t.offset).unwrap();
+        assert_eq!(t2.lines.len(), 1);
+        assert_eq!(t2.lines[0]["content"], "more");
     }
 
     #[test]

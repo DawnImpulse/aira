@@ -21,6 +21,12 @@ type Normalizer = (e: Raw) => AgentEvent[];
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 const input = (e: Raw) => (e.tool_input ?? {}) as Record<string, unknown>;
 
+/**
+ * Claude Notification types that are real asks. idle_prompt fires 60s after a finished turn, and
+ * auth_success, agent_completed, quota_auto_resume_* etc. are status reports, so none of those count.
+ */
+export const asksInput = (t: string | undefined) => !!t && (["permission_prompt", "agent_needs_input"].includes(t) || t.startsWith("elicitation"));
+
 /** Claude Code hooks (https://code.claude.com/docs/en/hooks). */
 const claude: Normalizer = (e) => {
   const caller = e.agent_id ?? null; // set when the event comes from inside a subagent
@@ -40,13 +46,8 @@ const claude: Normalizer = (e) => {
       return caller ? [] : [{ kind: "prompt" }];
     case "Stop":
       return caller ? [] : [{ kind: "stop" }];
-    case "Notification": {
-      // Only real asks. idle_prompt fires 60s after a finished turn, and auth_success, agent_completed,
-      // quota_auto_resume_* etc. are status reports, so none of those count as "needs input".
-      const t = str(e.notification_type) ?? "";
-      const asks = ["permission_prompt", "agent_needs_input"].includes(t) || t.startsWith("elicitation");
-      return caller || !asks ? [] : [{ kind: "waiting" }];
-    }
+    case "Notification":
+      return caller || !asksInput(str(e.notification_type)) ? [] : [{ kind: "waiting" }];
   }
   return [];
 };

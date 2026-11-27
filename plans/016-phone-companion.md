@@ -21,11 +21,18 @@ loopback listener the email sign-in link lands on.
 - **Connection:** per room, one `onValue` on `offer`. A verified offer newer than the last one (and
   under 2 min old, so a stale mailbox entry after a restart is skipped) tears down the old peer and
   answers: STUN only, no trickle (3 s gathering cap), `answer` written with `update()` on the room.
-- **Channels:** the phone opens `ctl` and `pty`. `sub` → `term` event with the Mac's geometry, then
-  the xterm screen (SerializeAddon, 300 lines of scrollback) as pty frames chunked at 16 KB; `in` →
-  `termInput`, which goes through xterm's `onData` so the activity heuristics and ptyWrite run as for
-  local typing. `terminals.ts` exposes `taps` (start/out/exit/resize) that phone.ts fills; output is
-  tapped in `channelFor`, so reattached sessions (plan 015) are covered.
+- **Channel:** the phone opens `ctl` only (the pty mirror was dropped the same day, see below). `sub`
+  → the terminal's conversation; `in` → `termInput`, which goes through xterm's `onData` so the
+  activity heuristics and ptyWrite run as for local typing. `terminals.ts` exposes `taps`
+  (exit/resize/hook) that phone.ts fills.
+- **Conversation (`conv`):** `agent_transcript` tails the Claude Code transcript from a byte offset
+  (same path check as `agent_usage`; `user`/`assistant` lines only, trimmed). `lib/conv.ts` folds
+  lines into items: user prompts, assistant text, one `tool` item per tool_use whose `tool_result`
+  (a `user` line, not a user message) sets its detail and status, and `prompt` items from Notification
+  hooks that ask for input (resolved when status leaves waiting). Polled every second while any phone
+  watches; `reset:true` + last 50 items on subscribe, then changed items, 20 per message. Shells and
+  other agents get `unsupported` with a reason. Checked by `bun test src/lib/conv.test.ts` and the
+  Rust `tail_*` test.
 - **State:** `{t:"state", projects, terms}` on ctl open and, debounced 250 ms, whenever the store
   changes and the JSON differs. Fields follow `models.dart` (`agentStatus.state`, `subagents`, `usage`).
 - **Push:** `notifyAgent("Waiting Input")` also writes `wake` to every room whose phone is not
@@ -37,11 +44,10 @@ loopback listener the email sign-in link lands on.
 ## Not covered
 
 - TURN, App Check, Google sign-in (backend side not ready either).
-- Backpressure on the pty channel: a slow phone just buffers.
 - A status-bar indicator for connected phones.
-- `term` (ctl) and the screen replay (pty) travel on different SCTP streams, so a replay chunk can land
-  before the `term` that resets the phone's terminal. Fix belongs on the phone: hold pty frames until
-  the `term` for their `gen`.
+- `prompt` items need the project's Claude hooks on; without them the phone sees no question, only
+  the `waiting` status on the board.
+- Assistant text streams in whole blocks (the transcript writes a block when it completes).
 
 ## MOBILE.md reconciliation (2026-11-27)
 
@@ -56,6 +62,9 @@ email link finishing on a loopback listener (no paste).
 
 ## Status (2026-11-27)
 
-Implemented. Verified: `cargo check`, `tsc`, `vite build`, HMAC/base64 parity with Node. Not verified
-end to end: the live Firebase sign-in, WebRTC in the Tauri webview and the phone round trip need the
-phone and the account.
+Terminal mirror verified live with the phone session (answer, ctl, state, pty backlog, input echo).
+The same day the contract changed to a conversation view (MOBILE.md "Data channel"): `pty`, `term`
+and `resize` are gone, `conv` replaces them. Verified: `cargo test` (tail reader), `bun test`
+(fold), `tsc`. `conv` verified live the same day: backlog, incremental items, re-sub, tool item with
+detail, gen echo. Not yet exercised live: `prompt` items and `exit`. Markdown in assistant text is
+sent raw; the phone renders plain text for now.

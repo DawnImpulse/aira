@@ -71,31 +71,20 @@ let lastSize = { cols: 120, rows: 32 };
 
 // ---------- phone companion taps (lib/phone) ----------
 
-/** Raw output, exit and resize of every terminal; lib/phone replaces these to mirror a terminal to a phone. */
+/** Exit, resize and raw hook events of every terminal; lib/phone fills these in for its conversation view. */
 export const taps = {
-  start: (_key: string) => {},
-  out: (_key: string, _bytes: Uint8Array) => {},
   exit: (_key: string, _code: number) => {},
   resize: (_key: string, _cols: number, _rows: number) => {},
+  hook: (_key: string, _events: HookEvent[]) => {},
 };
+/** The Claude Code transcript a terminal's hooks reported, if any yet. */
+export const transcriptPath = (key: string) => transcripts.get(key);
 export const termSize = (key: string) => {
   const t = xts.get(key)?.term;
   return t ? { cols: t.cols, rows: t.rows } : lastSize;
 };
 /** Types into a terminal as if at its keyboard: same path as local input (heuristics, ptyWrite). */
 export const termInput = (key: string, data: string) => xts.get(key)?.term.input(data);
-/** The terminal's screen and recent scrollback as escape sequences, so a late viewer starts in sync. */
-export function termScreen(key: string, scrollback = 300): string {
-  const x = xts.get(key);
-  if (!x) return "";
-  const s = new SerializeAddon();
-  x.term.loadAddon(s);
-  try {
-    return s.serialize({ scrollback });
-  } finally {
-    s.dispose();
-  }
-}
 const fontFamily = (s: Settings) => `"${s.monoFont}", "SF Mono", Menlo, monospace`;
 
 export function setTerminalTheme(dark: boolean, s: Settings) {
@@ -324,7 +313,6 @@ export async function startSession(key: string) {
   const sessionId = uid();
   const now = Date.now();
   setTerm(key, { sessionId, status: "running", startedAt: now, endedAt: undefined, exitCode: undefined, stopped: false });
-  taps.start(key);
   const scriptId = t.scriptId;
   if (scriptId)
     updateConfig((c) => {
@@ -346,7 +334,6 @@ function channelFor(key: string, sessionId: string, x: XT) {
     if (msg instanceof ArrayBuffer) {
       lastOut.set(key, Date.now());
       const bytes = new Uint8Array(msg);
-      taps.out(key, bytes);
       x.term.write(bytes, () => {
         unacked += bytes.length;
         if (unacked >= ACK_EVERY) {
@@ -775,9 +762,7 @@ const SHOW_USAGE = false;
 const transcripts = new Map<string, string>(); // term key → transcript_path from hook payloads
 
 /** The transcript lags the hooks, so re-read 2s after a turn ends and again when the next one starts. */
-function trackUsage(key: string, raw: HookEvent[], evs: AgentEvent[]) {
-  const path = raw.find((e) => e.transcript_path)?.transcript_path;
-  if (path) transcripts.set(key, path);
+function trackUsage(key: string, evs: AgentEvent[]) {
   if (evs.some((e) => e.kind === "prompt")) refreshUsage(key);
   if (evs.some((e) => e.kind === "stop")) setTimeout(() => refreshUsage(key), 2000);
 }
@@ -821,7 +806,10 @@ export function applyHookEvents(key: string, events: HookEvent[]) {
     hookActive.add(key);
     interruptedAt.delete(key);
   }
-  if (SHOW_USAGE) trackUsage(key, events, evs);
+  const path = events.find((e) => e.transcript_path)?.transcript_path;
+  if (path) transcripts.set(key, path);
+  if (SHOW_USAGE) trackUsage(key, evs);
+  taps.hook(key, events);
   useStore.setState((s) => ({ subagents: { ...s.subagents, [key]: [...h.nodes.values()] } }));
   if (!main || !exact) return;
   const prev = get().agentStatus[key];

@@ -1,8 +1,10 @@
 /**
- * Phone companion (BACKEND.md). Firebase Realtime Database is only the mailbox for one WebRTC offer
- * and answer per connection; after that the phone (aira-mobile) talks to this Mac over two data
- * channels it opens: `ctl` (JSON) and `pty` (binary frames `[gen][bytes]`). One pairing secret =
- * one room = one phone; the secrets live in the Keychain (phone.rs), the sign-in in IndexedDB.
+ * Phone companion (MOBILE.md, BACKEND.md). Firebase Realtime Database is only the mailbox for one
+ * WebRTC offer and answer per connection; after that the phone (aira-mobile) talks to this Mac over
+ * the `ctl` data channel it opens: JSON both ways. The phone sees the board (state snapshots) and one
+ * terminal's agent session as a conversation folded from the Claude Code transcript (lib/conv), and
+ * types raw input back. One pairing secret = one room = one phone; secrets live in the Keychain
+ * (phone.rs), the sign-in in IndexedDB.
  */
 import { listen } from "@tauri-apps/api/event";
 import { initializeApp } from "firebase/app";
@@ -10,9 +12,11 @@ import { browserLocalPersistence, indexedDBLocalPersistence, initializeAuth, isS
 import { getDatabase, onValue, ref, remove, update, type Unsubscribe } from "firebase/database";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { create } from "zustand";
-import { api } from "../ipc";
+import { api, type HookEvent } from "../ipc";
 import { notify, useStore } from "../store";
-import { taps, termInput, termScreen, termSize } from "./terminals";
+import { asksInput } from "./agentEvents";
+import { fold, type ConvItem } from "./conv";
+import { taps, termInput, termSize, transcriptPath } from "./terminals";
 
 // Public by design: identifies the project; rules and Auth grant access.
 const firebaseConfig = {
@@ -74,23 +78,18 @@ interface Room {
   off: Unsubscribe | null;
   pc: RTCPeerConnection | null;
   ctl: RTCDataChannel | null;
-  pty: RTCDataChannel | null;
-  /** What the phone watches; `gen` stamps every pty frame. */
+  /** The terminal the phone watches; `gen` stamps every `conv`. */
   sub: { key: string; gen: number } | null;
   /** Newest offer answered; anything older is a stale mailbox entry. */
   lastAt: number;
   /** `disconnected` grace: ICE gets 10 s to recover before the peer is dropped. */
   grace: ReturnType<typeof setTimeout> | null;
-  /** pty frames were dropped (phone too slow); a fresh `term` + screen goes out once the buffer drains. */
-  dropped: boolean;
   /** Runs once, on the first offer whose tag verifies: the phone scanned the QR. */
   onFirstOffer?: () => void;
 }
 
 const rooms = new Map<string, Room>();
 const ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] }; // ponytail: STUN only, TURN when CGNAT bites
-const CHUNK = 16 * 1024;
-const MAX_BUFFERED = 1024 * 1024;
 const STALE_MS = 120_000;
 
 const setRoom = (room: Room, state: RoomState, error?: string) =>
@@ -98,9 +97,10 @@ const setRoom = (room: Room, state: RoomState, error?: string) =>
 
 function openRoom(phone: Phone, onFirstOffer?: () => void) {
   if (rooms.has(phone.roomId)) return;
-  const room: Room = { phone, secret: unb64(phone.secret), off: null, pc: null, ctl: null, pty: null, sub: null, lastAt: 0, grace: null, dropped: false, onFirstOffer };
+  const room: Room = { phone, secret: unb64(phone.secret), off: null, pc: null, ctl: null, sub: null, lastAt: 0, grace: null, onFirstOffer };
   rooms.set(phone.roomId, room);
   setRoom(room, "idle");
+  // The whole room, not just `offer`: an offer already answered before a restart shows as answer.at === offer.at.
   room.off = onValue(
     ref(db, `rooms/${phone.roomId}`),
     (snap) => void onOffer(room, snap.val()).catch((e) => setRoom(room, "error", String(e))),
@@ -124,11 +124,9 @@ function closeRoom(roomId: string) {
 function dropPeer(room: Room) {
   if (room.grace) clearTimeout(room.grace);
   room.grace = null;
-  room.dropped = false;
   room.ctl?.close();
-  room.pty?.close();
   room.pc?.close();
-  room.ctl = room.pty = room.pc = null;
+  room.ctl = room.pc = null;
   room.sub = null;
 }
 
@@ -148,27 +146,16 @@ async function onOffer(room: Room, v: unknown) {
   room.pc = pc;
   setRoom(room, "connecting");
   pc.ondatachannel = ({ channel }) => {
-    if (room.pc !== pc) return;
-    if (channel.label === "ctl") {
-      room.ctl = channel;
-      const opened = () => {
-        setRoom(room, "connected");
-        sendState(room, true);
-      };
-      // Some engines hand over a channel that is already open and never fire onopen.
-      if (channel.readyState === "open") opened();
-      else channel.onopen = opened;
-      channel.onmessage = (m) => onCtl(room, m.data);
-    } else if (channel.label === "pty") {
-      channel.binaryType = "arraybuffer";
-      channel.bufferedAmountLowThreshold = 64 * 1024;
-      channel.onbufferedamountlow = () => {
-        if (!room.dropped || room.pty !== channel) return;
-        room.dropped = false;
-        sendTerm(room); // the phone missed bytes: start it over from the current screen, same gen
-      };
-      room.pty = channel;
-    }
+    if (room.pc !== pc || channel.label !== "ctl") return;
+    room.ctl = channel;
+    const opened = () => {
+      setRoom(room, "connected");
+      sendState(room, true);
+    };
+    // Some engines hand over a channel that is already open and never fire onopen.
+    if (channel.readyState === "open") opened();
+    else channel.onopen = opened;
+    channel.onmessage = (m) => onCtl(room, m.data);
   };
   pc.onconnectionstatechange = () => {
     if (room.pc !== pc) return;
@@ -206,35 +193,10 @@ const gathered = (pc: RTCPeerConnection, ms: number) =>
     };
   });
 
-// ---------- data channels ----------
+// ---------- ctl ----------
 
 function send(room: Room, msg: Record<string, unknown>) {
   if (room.ctl?.readyState === "open") room.ctl.send(JSON.stringify(msg));
-}
-
-function ptySend(room: Room, bytes: Uint8Array) {
-  const { pty, sub } = room;
-  if (!sub || pty?.readyState !== "open") return;
-  if (pty.bufferedAmount > MAX_BUFFERED) {
-    room.dropped = true; // resumed by onbufferedamountlow
-    return;
-  }
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    const part = bytes.subarray(i, i + CHUNK);
-    const frame = new Uint8Array(part.length + 1);
-    frame[0] = sub.gen;
-    frame.set(part, 1);
-    pty.send(frame);
-  }
-}
-
-/** `term` event (the phone resets its terminal) followed by the current screen. */
-function sendTerm(room: Room) {
-  const sub = room.sub;
-  if (!sub) return;
-  send(room, { t: "term", key: sub.key, ...termSize(sub.key), gen: sub.gen });
-  const screen = termScreen(sub.key);
-  if (screen) ptySend(room, new TextEncoder().encode(screen));
 }
 
 function onCtl(room: Room, raw: unknown) {
@@ -247,11 +209,141 @@ function onCtl(room: Room, raw: unknown) {
   }
   if (m.t === "sub") {
     room.sub = typeof m.key === "string" ? { key: m.key, gen: Number(m.gen) & 0xff } : null;
-    sendTerm(room);
+    if (room.sub) {
+      const c = convOf(room.sub.key);
+      if (c.ready) sendBacklog(room, c); // else the first tick sends it to every subscriber
+    }
   } else if (m.t === "in" && typeof m.key === "string" && typeof m.data === "string") termInput(m.key, m.data);
 }
 
 const watchers = (key: string) => [...rooms.values()].filter((r) => r.sub?.key === key);
+
+// ---------- conversation: the Claude transcript, tailed while a phone watches ----------
+
+interface Conv {
+  key: string;
+  /** Transcript on disk, once a hook reported it. */
+  path?: string;
+  offset: number;
+  items: Map<string, ConvItem>;
+  unsupported?: string;
+  /** First evaluation done: late subscribers get the backlog at once. */
+  ready: boolean;
+  loading: boolean;
+  timer: ReturnType<typeof setInterval>;
+}
+
+const convs = new Map<string, Conv>();
+const BACKLOG = 50;
+const MSG_BYTES = 48 * 1024; // flush below this; SCTP caps a message around 256 KB
+
+function convOf(key: string): Conv {
+  let c = convs.get(key);
+  if (!c) {
+    c = { key, offset: 0, items: new Map(), ready: false, loading: false, timer: setInterval(() => void tick(key), 1000) };
+    convs.set(key, c);
+    void tick(key);
+  }
+  return c;
+}
+
+function unsupportedReason(key: string): string | undefined {
+  const t = useStore.getState().terms[key];
+  if (!t) return "This terminal is gone";
+  if (!t.agent) return "A shell has no conversation. Input below still runs commands.";
+  if (t.agent !== "claude") return "Conversation view supports Claude Code only for now.";
+  if (!transcriptPath(key)) return "Waiting for Claude Code's first message. Status tracking must be on for this project.";
+}
+
+async function tick(key: string) {
+  const c = convs.get(key);
+  if (!c) return;
+  const subs = watchers(key);
+  if (!subs.length) {
+    clearInterval(c.timer); // nobody watching: forget it, the next sub rebuilds from the transcript
+    convs.delete(key);
+    return;
+  }
+  if (c.loading) return;
+  c.loading = true;
+  try {
+    const path = transcriptPath(key);
+    if (path !== c.path || !c.ready) {
+      c.path = path;
+      c.offset = 0;
+      c.items.clear();
+      if (path) await load(c);
+      c.unsupported = unsupportedReason(key);
+      c.ready = true;
+      for (const r of subs) sendBacklog(r, c);
+      return;
+    }
+    if (!path) return;
+    const { changed, reset } = await load(c);
+    const st = useStore.getState().agentStatus[key]?.state;
+    if (st !== "waiting") {
+      for (const it of c.items.values()) {
+        if (it.role !== "prompt" || it.status !== "pending") continue;
+        it.status = "done"; // the question was answered (here or on the phone)
+        changed.push(it.id);
+      }
+    }
+    if (reset) for (const r of subs) sendBacklog(r, c);
+    else if (changed.length) for (const r of subs) sendConv(r, c, changed.map((id) => c.items.get(id)!), false);
+  } catch (e) {
+    c.unsupported = `Transcript unreadable: ${String(e)}`;
+  } finally {
+    c.loading = false;
+  }
+}
+
+async function load(c: Conv) {
+  const { lines, offset } = await api.agentTranscript(c.path!, c.offset);
+  const reset = offset < c.offset; // the file shrank: Rust started over, so do we
+  if (reset) c.items.clear();
+  c.offset = offset;
+  return { changed: fold(c.items, lines), reset };
+}
+
+function sendBacklog(room: Room, c: Conv) {
+  const all = [...c.items.values()];
+  sendConv(room, c, all.slice(-BACKLOG), true);
+}
+
+/** `conv` messages for `items`, chunked by size; the first carries `reset` and the unsupported reason. */
+function sendConv(room: Room, c: Conv, items: ConvItem[], reset: boolean) {
+  const sub = room.sub;
+  if (!sub || sub.key !== c.key) return;
+  const head = { t: "conv", key: c.key, gen: sub.gen, ...(c.unsupported ? { unsupported: c.unsupported } : {}) };
+  if (!items.length) return send(room, { ...head, reset, items: [] });
+  let batch: ConvItem[] = [];
+  let bytes = 0;
+  const flush = () => {
+    if (!batch.length) return;
+    send(room, { ...head, reset: reset && batch[0] === items[0], items: batch });
+    batch = [];
+    bytes = 0;
+  };
+  for (const it of items) {
+    const n = JSON.stringify(it).length;
+    if (bytes + n > MSG_BYTES) flush();
+    batch.push(it);
+    bytes += n;
+  }
+  flush();
+}
+
+/** A Notification hook that asks for input becomes a `prompt` item the phone answers with Yes/No. */
+function onHookEvents(key: string, events: HookEvent[]) {
+  const c = convs.get(key);
+  if (!c) return;
+  for (const e of events) {
+    if (e.hook_event_name !== "Notification" || e.agent_id || !asksInput(e.notification_type)) continue;
+    const it: ConvItem = { id: `prompt:${Date.now()}`, role: "prompt", ts: Date.now(), text: e.message || "Claude Code needs your input", status: "pending" };
+    c.items.set(it.id, it);
+    for (const r of watchers(key)) sendConv(r, c, [it], false);
+  }
+}
 
 // ---------- state snapshot (`Snapshot.fromJson` in models.dart) ----------
 
@@ -264,17 +356,17 @@ function snapshot() {
   const terms = Object.values(s.terms)
     .filter((t) => t.status === "running")
     .map((t) => ({
-    key: t.key,
-    name: t.name,
-    projectId: t.projectId,
-    status: t.status,
-    agent: t.agent ?? null,
-    cwd: t.cwd,
-    ...termSize(t.key),
-    agentStatus: { state: s.agentStatus[t.key]?.state ?? "idle", since: s.agentStatus[t.key]?.since ?? 0 },
-    subagents: s.subagents[t.key] ?? [],
-    usage: s.usage[t.key] ?? [],
-  }));
+      key: t.key,
+      name: t.name,
+      projectId: t.projectId,
+      status: t.status,
+      agent: t.agent ?? null,
+      cwd: t.cwd,
+      ...termSize(t.key),
+      agentStatus: { state: s.agentStatus[t.key]?.state ?? "idle", since: s.agentStatus[t.key]?.since ?? 0 },
+      subagents: s.subagents[t.key] ?? [],
+      usage: s.usage[t.key] ?? [],
+    }));
   return JSON.stringify({ t: "state", projects, terms });
 }
 
@@ -378,19 +470,11 @@ let booted = false;
 export function initPhone() {
   if (booted) return;
   booted = true;
-  taps.out = (key, bytes) => {
-    for (const r of watchers(key)) ptySend(r, bytes);
-  };
   taps.exit = (key, code) => {
-    for (const r of watchers(key)) send(r, { t: "exit", key, code, gen: r.sub!.gen });
+    for (const r of watchers(key)) send(r, { t: "exit", key, code });
   };
-  taps.resize = (key, cols, rows) => {
-    for (const r of watchers(key)) send(r, { t: "resize", key, cols, rows, gen: r.sub!.gen });
-    scheduleState();
-  };
-  taps.start = (key) => {
-    for (const r of watchers(key)) sendTerm(r);
-  };
+  taps.resize = () => scheduleState(); // cols/rows ride in the snapshot
+  taps.hook = onHookEvents;
   useStore.subscribe(scheduleState);
 
   void listen<string>("phone-login-url", async (e) => {

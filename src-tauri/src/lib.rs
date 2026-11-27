@@ -197,6 +197,7 @@ pub fn run() {
             agent::agent_events,
             agent::agent_events_clear,
             agent::agent_usage,
+            agent::agent_transcript,
             agent::notify_agent,
             agent::agent_setup,
             agent::agent_repo_hooks,

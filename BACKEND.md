@@ -134,10 +134,7 @@ The backend function `wake` reads `rooms/<roomId>/token` and sends an FCM push w
 
 ## Data channel protocol, for reference
 
-Defined by `aira-mobile/lib/connection.dart` and `lib/models.dart`. The IDE receives channels via `ondatachannel`, the phone creates them.
-
-- `ctl`: JSON strings. Phone → Mac: `{"t":"sub","key":<terminal key>,"gen":<u8>}` subscribes (phone owns `gen`, bumps it per subscribe), `key: null` unsubscribes; `{"t":"in","key","data"}` types `data` into that terminal. Mac → phone: `{"t":"state", projects:[...], terms:[...]}` on open and after any change, plus `{"t":"term"|"exit"|"resize", key, cols, rows, gen}` events. Field shapes are in `models.dart` (`Project`, `Term`, `Subagent`).
-- `pty`: binary. Frame = `[gen: u8][raw pty bytes]`. The phone drops frames whose `gen` is not its current one, so stamp every frame with the `gen` from the latest `sub`. On `sub` the IDE answers with a `term` event and then the terminal's current screen (xterm serialize) as pty frames, chunked at 16 KB (SCTP caps a message around 256 KB).
+Defined by `MOBILE.md` in this repo (source: `aira-mobile/lib/connection.dart`, `lib/models.dart`). One channel, `ctl`, JSON both ways: the phone subscribes to a terminal (`sub`, with a `gen` it owns) and types raw input (`in`); the IDE sends `state` snapshots, the terminal's agent session as `conv` items folded from the Claude Code transcript, and `exit`. Every `conv` echoes the phone's `gen`.
 
 ## Testing against the live backend without the phone
 
