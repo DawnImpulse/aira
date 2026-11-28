@@ -144,6 +144,9 @@ function xterm(key: string): XT {
   term.attachCustomKeyEventHandler((e) => {
     // WebKit also fires keypress for Shift+Enter; left to xterm, that sends a second CR after ours (= submit).
     if (e.type !== "keydown") return !(e.key === "Enter" && e.shiftKey);
+    // xterm sends ESC [ Z for Shift+Tab but leaves the browser's default on, so focus walked out of the
+    // terminal on every Claude Code mode cycle. Stop the default; xterm still processes the key.
+    if (e.key === "Tab" && e.shiftKey) e.preventDefault();
     if (e.metaKey && e.key === "k") {
       term.clear();
       return false;
