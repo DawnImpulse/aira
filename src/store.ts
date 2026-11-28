@@ -1079,7 +1079,7 @@ export async function boot() {
     if (e.payload.procs) detectAgents(e.payload.procs);
   });
   listen<string>("menu", (e) => onMenu(e.payload));
-  initPhone();
+  if (import.meta.env.DEV) initPhone(); // phone companion: dev builds only until it ships
   listen("quit-requested", () => quitApp());
   listen<string>("notification-clicked", (e) => e.payload && focusTerminal(e.payload)); // no key: the Settings test banner
   listen<string>("browser:docked", (e) => set((s) => ({ popped: omit(s.popped, e.payload) })));

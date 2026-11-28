@@ -18,7 +18,7 @@ const SECTIONS = [
   { id: "appearance", label: "Appearance", icon: "palette" },
   { id: "agents", label: "Coding agents", icon: "smart_toy" },
   { id: "notifications", label: "Notifications", icon: "notifications" },
-  { id: "phone", label: "Phone", icon: "smartphone" },
+  ...(import.meta.env.DEV ? [{ id: "phone", label: "Phone", icon: "smartphone" }] : []), // ships later
   { id: "ai", label: "Commit messages", icon: "auto_awesome" },
   { id: "shortcuts", label: "Shortcuts", icon: "keyboard" },
   { id: "updates", label: "Updates", icon: "system_update_alt" },
