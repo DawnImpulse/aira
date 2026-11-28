@@ -34,7 +34,7 @@ pub struct AiCfg {
     label: String,
 }
 
-fn entry(key_id: &str) -> Result<keyring::Entry, String> {
+pub(crate) fn entry(key_id: &str) -> Result<keyring::Entry, String> {
     keyring::Entry::new(SERVICE, key_id).map_err(|e| e.to_string())
 }
 

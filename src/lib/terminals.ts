@@ -10,6 +10,7 @@ import "@xterm/xterm/css/xterm.css";
 import { api, type HookEvent, type Project, type PtyMessage, type Script, type Settings } from "../ipc";
 import { dropTab, notify, openTerminalTab, projectById, scriptCwd, scriptsWindow, spaceOfPath, uid, updateConfig, useStore, type AgentStatus, type Term } from "../store";
 import { agentById, type Agent } from "./agents";
+import { phoneWake } from "./phone";
 import { openLink, popupMenu } from "./menu";
 import { ask, choose } from "./dialog";
 import { emptyTree, fold, normalize, type AgentEvent, type TreeState } from "./agentEvents";
@@ -67,6 +68,23 @@ const isInterrupt = (d: string) => d === "\x03" || d === "\x1b" || /^\x1b\[(27|9
 const xts = new Map<string, XT>();
 let theme = DARK;
 let lastSize = { cols: 120, rows: 32 };
+
+// ---------- phone companion taps (lib/phone) ----------
+
+/** Exit, resize and raw hook events of every terminal; lib/phone fills these in for its conversation view. */
+export const taps = {
+  exit: (_key: string, _code: number) => {},
+  resize: (_key: string, _cols: number, _rows: number) => {},
+  hook: (_key: string, _events: HookEvent[]) => {},
+};
+/** The Claude Code transcript a terminal's hooks reported, if any yet. */
+export const transcriptPath = (key: string) => transcripts.get(key);
+export const termSize = (key: string) => {
+  const t = xts.get(key)?.term;
+  return t ? { cols: t.cols, rows: t.rows } : lastSize;
+};
+/** Types into a terminal as if at its keyboard: same path as local input (heuristics, ptyWrite). */
+export const termInput = (key: string, data: string) => xts.get(key)?.term.input(data);
 const fontFamily = (s: Settings) => `"${s.monoFont}", "SF Mono", Menlo, monospace`;
 
 export function setTerminalTheme(dark: boolean, s: Settings) {
@@ -126,6 +144,9 @@ function xterm(key: string): XT {
   term.attachCustomKeyEventHandler((e) => {
     // WebKit also fires keypress for Shift+Enter; left to xterm, that sends a second CR after ours (= submit).
     if (e.type !== "keydown") return !(e.key === "Enter" && e.shiftKey);
+    // xterm sends ESC [ Z for Shift+Tab but leaves the browser's default on, so focus walked out of the
+    // terminal on every Claude Code mode cycle. Stop the default; xterm still processes the key.
+    if (e.key === "Tab" && e.shiftKey) e.preventDefault();
     if (e.metaKey && e.key === "k") {
       term.clear();
       return false;
@@ -172,6 +193,7 @@ function xterm(key: string): XT {
   });
   term.onResize(({ cols, rows }) => {
     lastResize.set(key, Date.now()); // the redraw that follows is not "work" (see the heuristic)
+    taps.resize(key, cols, rows);
     const id = live();
     if (id) api.ptyResize(id, cols, rows).catch(() => {});
   });
@@ -398,6 +420,7 @@ function onExit(key: string, sessionId: string, code: number) {
   if (!t.scriptId && !t.command && !sleeping.delete(key)) return removeTerm(key, true);
   if (t.agent && t.status !== "stopping") notifyAgent(key, code === 0 ? "Exited" : `Exited with code ${code}`);
   const stopped = t.status === "stopping";
+  taps.exit(key, code);
   xts.get(key)?.kitty.splice(0, Infinity, 0);
   xts.get(key)?.term.write(`\r\n\x1b[2m[${stopped ? "stopped" : `process exited with code ${code}`}]\x1b[0m\r\n`);
   setTerm(key, { status: "exited", exitCode: code, endedAt: Date.now(), stopped });
@@ -627,6 +650,7 @@ function notifyAgent(key: string, what: string) {
   // Space as the title, the terminal (unique per terminal, numbered) and state as the body.
   const title = spaceOfPath(t.cwd)?.name ?? projectById(t.projectId)?.name ?? t.name;
   const body = `${t.name} : ${what}`.toLowerCase();
+  if (what === "Waiting Input") phoneWake(key, title, body);
   api.notifyAgent(key, title, body).catch(() => {}); // resolves on click/clear, so never awaited
   useStore.setState((s) => ({
     notices: [{ key, title, body, at: now }, ...s.notices].slice(0, 50),
@@ -741,9 +765,7 @@ const SHOW_USAGE = false;
 const transcripts = new Map<string, string>(); // term key → transcript_path from hook payloads
 
 /** The transcript lags the hooks, so re-read 2s after a turn ends and again when the next one starts. */
-function trackUsage(key: string, raw: HookEvent[], evs: AgentEvent[]) {
-  const path = raw.find((e) => e.transcript_path)?.transcript_path;
-  if (path) transcripts.set(key, path);
+function trackUsage(key: string, evs: AgentEvent[]) {
   if (evs.some((e) => e.kind === "prompt")) refreshUsage(key);
   if (evs.some((e) => e.kind === "stop")) setTimeout(() => refreshUsage(key), 2000);
 }
@@ -787,7 +809,10 @@ export function applyHookEvents(key: string, events: HookEvent[]) {
     hookActive.add(key);
     interruptedAt.delete(key);
   }
-  if (SHOW_USAGE) trackUsage(key, events, evs);
+  const path = events.find((e) => e.transcript_path)?.transcript_path;
+  if (path) transcripts.set(key, path);
+  if (SHOW_USAGE) trackUsage(key, evs);
+  taps.hook(key, events);
   useStore.setState((s) => ({ subagents: { ...s.subagents, [key]: [...h.nodes.values()] } }));
   if (!main || !exact) return;
   const prev = get().agentStatus[key];

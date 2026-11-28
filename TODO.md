@@ -11,6 +11,8 @@ Kept by hand. Add items under **Open** with a rough deadline. When one ships, ti
 - [ ] Check the website's videos in Safari and on a phone once it's live · ~TBD
 - [ ] Register the website with Google Search Console and Bing Webmaster Tools, submit the sitemap · ~TBD
 - [ ] In-app support for updates · ~TBD
+- [ ] Emulator support inside the IDE · ~TBD
+- [ ] Scripts window: only option is to add a new terminal · ~TBD
 
 ## Done
 

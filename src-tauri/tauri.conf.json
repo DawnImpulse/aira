@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: asset: http://asset.localhost; font-src 'self' data:; worker-src 'self' blob:; connect-src ipc: http://ipc.localhost",
+      "csp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: asset: http://asset.localhost; font-src 'self' data:; worker-src 'self' blob:; connect-src ipc: http://ipc.localhost https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://us-central1-aira-server.cloudfunctions.net",
       "devCsp": null,
       "dangerousDisableAssetCspModification": ["style-src"]
     }
